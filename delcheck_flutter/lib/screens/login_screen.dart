@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/api_client.dart';
 import '../providers/auth_provider.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -48,6 +49,12 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _memuat = false);
     }
+  }
+
+  void _bukaDaftar() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+    );
   }
 
   @override
@@ -151,6 +158,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2))
                           : const Text('Masuk'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: _memuat ? null : _bukaDaftar,
+                      child: const Text('Belum punya akun? Daftar sebagai toko'),
                     ),
                   ],
                 ),
