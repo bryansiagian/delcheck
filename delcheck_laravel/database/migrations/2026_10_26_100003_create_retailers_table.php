@@ -21,10 +21,17 @@ return new class extends Migration
             $table->decimal('latitude', 10, 7)->nullable();  // untuk Sebaran Retail & check-in kunjungan
             $table->decimal('longitude', 10, 7)->nullable();
             $table->boolean('is_active')->default(true);
+
+            // Verifikasi pendaftaran oleh Admin
+            $table->string('status_verifikasi', 20)->default('menunggu'); // menunggu, disetujui, ditolak
+            $table->foreignId('diverifikasi_oleh')->nullable()->constrained('users')->nullOnDelete();
+            $table->timestamp('diverifikasi_at')->nullable();
+            $table->text('alasan_ditolak')->nullable();                   // BR-06
             $table->timestamps();
             $table->softDeletes();
 
             $table->index('nama_toko');
+            $table->index('status_verifikasi');
         });
     }
 
