@@ -1,0 +1,144 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/auth_provider.dart';
+
+class HomeScreen extends StatelessWidget {
+  const HomeScreen({super.key});
+
+  Future<void> _keluar(BuildContext context) async {
+    final yakin = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Keluar'),
+        content: const Text('Anda yakin ingin keluar dari akun ini?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Keluar')),
+        ],
+      ),
+    );
+    if (yakin == true && context.mounted) {
+      await context.read<AuthProvider>().logout();
+      // AuthGate otomatis kembali ke halaman login.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = context.watch<AuthProvider>().user;
+    final tema = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Beranda'),
+        actions: [
+          IconButton(
+            tooltip: 'Keluar',
+            icon: const Icon(Icons.logout),
+            onPressed: () => _keluar(context),
+          ),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 28,
+                    child: Text(
+                      (user?.nama.isNotEmpty ?? false)
+                          ? user!.nama[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(fontSize: 22),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Halo,', style: tema.textTheme.bodySmall),
+                        Text(user?.nama ?? 'Pengguna',
+                            style: tema.textTheme.titleLarge
+                                ?.copyWith(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 6),
+                        Chip(
+                          label: Text(user?.peranUtama ?? '-'),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          // Menu per peran. Isi tombol akan dihubungkan ke fitur MVP berikutnya.
+          if (user?.punyaPeran('admin') ?? false)
+            const _MenuTile(
+              ikon: Icons.verified_user_outlined,
+              judul: 'Verifikasi Pendaftaran Retail',
+              subjudul: 'Setujui atau tolak toko yang mendaftar',
+            ),
+          if (user?.punyaPeran('retail') ?? false)
+            const _MenuTile(
+              ikon: Icons.storefront_outlined,
+              judul: 'Toko Saya',
+              subjudul: 'Segera hadir',
+            ),
+          if (user?.punyaPeran('sales') ?? false)
+            const _MenuTile(
+              ikon: Icons.people_outline,
+              judul: 'Toko Binaan',
+              subjudul: 'Segera hadir',
+            ),
+          if (user?.punyaPeran('warehouse') ?? false)
+            const _MenuTile(
+              ikon: Icons.warehouse_outlined,
+              judul: 'Gudang',
+              subjudul: 'Segera hadir',
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuTile extends StatelessWidget {
+  const _MenuTile({
+    required this.ikon,
+    required this.judul,
+    required this.subjudul,
+  });
+
+  final IconData ikon;
+  final String judul;
+  final String subjudul;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: Icon(ikon),
+        title: Text(judul),
+        subtitle: Text(subjudul),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Fitur ini belum dihubungkan.')),
+          );
+        },
+      ),
+    );
+  }
+}
