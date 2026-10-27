@@ -62,6 +62,7 @@ class RolePermissionSeeder extends Seeder
                 'pengiriman.pantau',
                 'pengiriman.perbarui',           // UC-A02 (Dikirim, BR-10)
                 'retailer.lihat-daftar',         // UC-A05
+                'retailer.verifikasi',           // UC-A07 (baru): setujui/tolak pendaftaran Retail
                 'ulasan.lihat',                  // UC-A06
             ],
 
