@@ -103,7 +103,7 @@ class VerifikasiRetailTest extends TestCase
             ->assertOk();
     }
 
-    /** sales_id kini opsional, tetapi kalau dikirim tetap harus user Sales. */
+    /** sales_id opsional, tetapi kalau dikirim tetap harus user Sales. */
     public function test_setujui_dengan_user_yang_bukan_sales_ditolak(): void
     {
         $retailer = $this->buatPendaftar();
@@ -158,6 +158,47 @@ class VerifikasiRetailTest extends TestCase
         $this->postJson('/api/auth/login', ['email' => 'toko@baru.test', 'password' => 'rahasia123'])
             ->assertStatus(403)
             ->assertJsonPath('kode', 'AKUN_DITOLAK');
+    }
+
+    /** Pendaftaran yang sudah ditolak bisa disetujui ulang oleh Admin. */
+    public function test_admin_menyetujui_ulang_pendaftaran_yang_ditolak(): void
+    {
+        $admin = $this->buatUser(Peran::Admin);
+        $retailer = $this->buatPendaftar();
+        Sanctum::actingAs($admin);
+
+        $this->postJson("/api/admin/pendaftaran-retail/{$retailer->id}/tolak", ['alasan' => 'Foto toko buram'])
+            ->assertOk();
+        $this->assertFalse($retailer->user->fresh()->is_active);
+
+        $this->postJson("/api/admin/pendaftaran-retail/{$retailer->id}/setujui")
+            ->assertOk()
+            ->assertJsonPath('data.status_verifikasi', 'disetujui');
+
+        $this->assertDatabaseHas('retailers', [
+            'id' => $retailer->id,
+            'status_verifikasi' => 'disetujui',
+            'alasan_ditolak' => null,
+            'diverifikasi_oleh' => $admin->id,
+        ]);
+        $this->assertTrue($retailer->user->fresh()->is_active);
+
+        // Setelah disetujui ulang, Retail bisa login
+        $this->postJson('/api/auth/login', ['email' => 'toko@baru.test', 'password' => 'rahasia123'])
+            ->assertOk();
+    }
+
+    /** Yang sudah disetujui tidak bisa ditolak lewat endpoint ini. */
+    public function test_pendaftaran_yang_sudah_disetujui_tidak_bisa_ditolak(): void
+    {
+        $retailer = $this->buatPendaftar();
+        Sanctum::actingAs($this->buatUser(Peran::Admin));
+
+        $this->postJson("/api/admin/pendaftaran-retail/{$retailer->id}/setujui")->assertOk();
+
+        $this->postJson("/api/admin/pendaftaran-retail/{$retailer->id}/tolak", ['alasan' => 'Salah klik'])
+            ->assertStatus(409)
+            ->assertJsonPath('kode', 'PENDAFTARAN_SUDAH_DIPROSES');
     }
 
     public function test_daftar_sales_hanya_berisi_sales_aktif(): void
