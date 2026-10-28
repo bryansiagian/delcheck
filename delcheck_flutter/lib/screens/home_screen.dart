@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
+import 'admin_verifikasi_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -83,12 +84,17 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          // Menu per peran. Isi tombol akan dihubungkan ke fitur MVP berikutnya.
+          // Menu per peran. Menu yang belum punya onTap menampilkan "belum dihubungkan".
           if (user?.punyaPeran('admin') ?? false)
-            const _MenuTile(
+            _MenuTile(
               ikon: Icons.verified_user_outlined,
               judul: 'Verifikasi Pendaftaran Retail',
               subjudul: 'Setujui atau tolak toko yang mendaftar',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const AdminVerifikasiScreen()),
+              ),
             ),
           if (user?.punyaPeran('retail') ?? false)
             const _MenuTile(
@@ -119,11 +125,13 @@ class _MenuTile extends StatelessWidget {
     required this.ikon,
     required this.judul,
     required this.subjudul,
+    this.onTap,
   });
 
   final IconData ikon;
   final String judul;
   final String subjudul;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -133,11 +141,12 @@ class _MenuTile extends StatelessWidget {
         title: Text(judul),
         subtitle: Text(subjudul),
         trailing: const Icon(Icons.chevron_right),
-        onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Fitur ini belum dihubungkan.')),
-          );
-        },
+        onTap: onTap ??
+            () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Fitur ini belum dihubungkan.')),
+              );
+            },
       ),
     );
   }
