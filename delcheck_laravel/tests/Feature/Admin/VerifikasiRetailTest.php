@@ -72,14 +72,14 @@ class VerifikasiRetailTest extends TestCase
         $this->getJson('/api/admin/pendaftaran-retail')->assertUnauthorized();
     }
 
-    public function test_admin_menyetujui_dan_menugaskan_sales(): void
+    /** Menyetujui TANPA memilih sales (retail tidak terikat ke satu sales). */
+    public function test_admin_menyetujui_tanpa_memilih_sales(): void
     {
         $admin = $this->buatUser(Peran::Admin);
-        $sales = $this->buatUser(Peran::Sales);
         $retailer = $this->buatPendaftar();
         Sanctum::actingAs($admin);
 
-        $this->postJson("/api/admin/pendaftaran-retail/{$retailer->id}/setujui", ['sales_id' => $sales->id])
+        $this->postJson("/api/admin/pendaftaran-retail/{$retailer->id}/setujui")
             ->assertOk()
             ->assertJsonPath('data.status_verifikasi', 'disetujui');
 
@@ -89,10 +89,8 @@ class VerifikasiRetailTest extends TestCase
             'diverifikasi_oleh' => $admin->id,
         ]);
         $this->assertTrue($retailer->user->fresh()->is_active);
-        $this->assertDatabaseHas('sales_assignments', [
-            'sales_id' => $sales->id,
+        $this->assertDatabaseMissing('sales_assignments', [
             'retailer_id' => $retailer->id,
-            'is_active' => 1,
         ]);
         $this->assertDatabaseHas('audit_logs', [
             'auditable_id' => $retailer->id,
@@ -105,6 +103,7 @@ class VerifikasiRetailTest extends TestCase
             ->assertOk();
     }
 
+    /** sales_id kini opsional, tetapi kalau dikirim tetap harus user Sales. */
     public function test_setujui_dengan_user_yang_bukan_sales_ditolak(): void
     {
         $retailer = $this->buatPendaftar();
@@ -120,14 +119,13 @@ class VerifikasiRetailTest extends TestCase
 
     public function test_pendaftaran_tidak_bisa_diproses_dua_kali(): void
     {
-        $sales = $this->buatUser(Peran::Sales);
         $retailer = $this->buatPendaftar();
         Sanctum::actingAs($this->buatUser(Peran::Admin));
 
         $url = "/api/admin/pendaftaran-retail/{$retailer->id}/setujui";
-        $this->postJson($url, ['sales_id' => $sales->id])->assertOk();
+        $this->postJson($url)->assertOk();
 
-        $this->postJson($url, ['sales_id' => $sales->id])
+        $this->postJson($url)
             ->assertStatus(409)
             ->assertJsonPath('kode', 'PENDAFTARAN_SUDAH_DIPROSES');
     }
