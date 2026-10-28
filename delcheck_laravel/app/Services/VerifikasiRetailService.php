@@ -15,13 +15,20 @@ class VerifikasiRetailService
     /**
      * Setujui pendaftaran: toko menjadi aktif dan akun bisa login.
      *
-     * Penugasan Sales bersifat OPSIONAL (retail tidak terikat ke satu sales).
-     * Baris sales_assignments hanya dibuat jika $salesId diberikan.
+     * - Boleh dari status Menunggu (setujui biasa) atau Ditolak (setujui ulang).
+     * - Penugasan Sales bersifat OPSIONAL (retail tidak terikat ke satu sales);
+     *   baris sales_assignments hanya dibuat jika $salesId diberikan.
      */
     public function setujui(Retailer $retailer, ?int $salesId, User $admin): Retailer
     {
         return DB::transaction(function () use ($retailer, $salesId, $admin) {
-            $retailer = $this->kunciDanPastikanMenunggu($retailer);
+            $retailer = $this->kunciDanPastikanStatus(
+                $retailer,
+                [StatusVerifikasi::Menunggu, StatusVerifikasi::Ditolak],
+            );
+
+            // Simpan status asal (menunggu/ditolak) untuk audit log.
+            $statusAsal = $retailer->status_verifikasi;
 
             $retailer->update([
                 'status_verifikasi' => StatusVerifikasi::Disetujui,
@@ -42,7 +49,7 @@ class VerifikasiRetailService
             AuditLog::catat(
                 $retailer,
                 'verifikasi_disetujui',
-                StatusVerifikasi::Menunggu->value,
+                $statusAsal->value,
                 StatusVerifikasi::Disetujui->value,
                 null,
                 $salesId !== null ? ['sales_id' => $salesId] : [],
@@ -55,11 +62,12 @@ class VerifikasiRetailService
 
     /**
      * Tolak pendaftaran. Alasan wajib (BR-06). Akun tetap nonaktif.
+     * Hanya untuk pendaftaran yang masih Menunggu.
      */
     public function tolak(Retailer $retailer, string $alasan, User $admin): Retailer
     {
         return DB::transaction(function () use ($retailer, $alasan, $admin) {
-            $retailer = $this->kunciDanPastikanMenunggu($retailer);
+            $retailer = $this->kunciDanPastikanStatus($retailer, [StatusVerifikasi::Menunggu]);
 
             $retailer->update([
                 'status_verifikasi' => StatusVerifikasi::Ditolak,
@@ -82,12 +90,17 @@ class VerifikasiRetailService
         });
     }
 
-    /** Kunci baris agar dua Admin tidak memproses pendaftaran yang sama bersamaan. */
-    private function kunciDanPastikanMenunggu(Retailer $retailer): Retailer
+    /**
+     * Kunci baris agar dua Admin tidak memproses pendaftaran yang sama bersamaan,
+     * lalu pastikan statusnya termasuk yang diizinkan untuk aksi ini.
+     *
+     * @param  array<int, StatusVerifikasi>  $diizinkan
+     */
+    private function kunciDanPastikanStatus(Retailer $retailer, array $diizinkan): Retailer
     {
         $terkini = Retailer::query()->lockForUpdate()->findOrFail($retailer->id);
 
-        if ($terkini->status_verifikasi !== StatusVerifikasi::Menunggu) {
+        if (! in_array($terkini->status_verifikasi, $diizinkan, true)) {
             throw new ApiException('Pendaftaran ini sudah diproses.', 409, 'PENDAFTARAN_SUDAH_DIPROSES');
         }
 
