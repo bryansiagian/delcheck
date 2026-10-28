@@ -33,6 +33,13 @@ class RetailerPendaftar {
   });
 
   bool get menunggu => status == 'menunggu';
+  bool get ditolak => status == 'ditolak';
+
+  /// Boleh disetujui: pendaftaran baru, atau yang sebelumnya ditolak (setujui ulang).
+  bool get bisaDisetujui => menunggu || ditolak;
+
+  /// Penolakan hanya untuk pendaftaran yang masih menunggu.
+  bool get bisaDitolak => menunggu;
 
   String get statusLabel =>
       status.isEmpty ? '-' : status[0].toUpperCase() + status.substring(1);
