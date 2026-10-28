@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import 'admin_verifikasi_screen.dart';
 import 'produk_list_screen.dart';
+import 'stok_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -100,8 +101,8 @@ class HomeScreen extends StatelessWidget {
                     builder: (_) => const AdminVerifikasiScreen()),
               ),
             ),
-          // Admin dan Warehouse sama-sama mengelola katalog produk.
-          if (admin || warehouse)
+          // Admin dan Warehouse sama-sama mengelola produk dan stok.
+          if (admin || warehouse) ...[
             _MenuTile(
               ikon: Icons.inventory_2_outlined,
               judul: 'Produk',
@@ -111,6 +112,16 @@ class HomeScreen extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const ProdukListScreen()),
               ),
             ),
+            _MenuTile(
+              ikon: Icons.warehouse_outlined,
+              judul: 'Stok',
+              subjudul: 'Tambah atau kurangi stok, lihat riwayat',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const StokListScreen()),
+              ),
+            ),
+          ],
           if (user?.punyaPeran('retail') ?? false)
             const _MenuTile(
               ikon: Icons.storefront_outlined,
