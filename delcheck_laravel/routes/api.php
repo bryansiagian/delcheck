@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Admin\PendaftaranRetailController;
 use App\Http\Controllers\Api\Admin\SalesController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ProdukController;
+use App\Http\Controllers\Api\StokController;
 use App\Http\Controllers\Api\WilayahController;
 use Illuminate\Support\Facades\Route;
 
@@ -46,4 +47,14 @@ Route::middleware('auth:sanctum')
             Route::put('{produk}', [ProdukController::class, 'update']);
             Route::delete('{produk}', [ProdukController::class, 'destroy']);
         });
+    });
+
+// ------------------------------------------------------------------ stok
+Route::middleware(['auth:sanctum', 'permission:stok.kelola'])
+    ->prefix('stok')
+    ->group(function () {
+        Route::get('/', [StokController::class, 'index']);
+        Route::get('{produk}', [StokController::class, 'show']);
+        Route::get('{produk}/mutasi', [StokController::class, 'riwayat']);
+        Route::post('{produk}/mutasi', [StokController::class, 'ubah']);
     });
