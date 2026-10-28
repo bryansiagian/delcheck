@@ -14,10 +14,14 @@ class SetujuiRetailRequest extends FormRequest
         return true; // izin dijaga middleware permission:retailer.verifikasi
     }
 
+    /**
+     * sales_id OPSIONAL: retail tidak terikat ke satu sales.
+     * Kalau tetap dikirim, harus berupa user Sales yang aktif.
+     */
     public function rules(): array
     {
         return [
-            'sales_id' => ['bail', 'required', 'integer', function (string $attribute, mixed $value, Closure $fail) {
+            'sales_id' => ['bail', 'nullable', 'integer', function (string $attribute, mixed $value, Closure $fail) {
                 $valid = User::role(Peran::Sales->value)
                     ->where('is_active', true)
                     ->whereKey($value)
@@ -27,13 +31,6 @@ class SetujuiRetailRequest extends FormRequest
                     $fail('Sales tidak ditemukan atau tidak aktif.');
                 }
             }],
-        ];
-    }
-
-    public function messages(): array
-    {
-        return [
-            'sales_id.required' => 'Pilih Sales yang akan menangani toko ini.',
         ];
     }
 }
