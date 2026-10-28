@@ -61,7 +61,8 @@ class PendaftaranRetailController extends Controller
     /** POST /api/admin/pendaftaran-retail/{retailer}/setujui   body: sales_id */
     public function setujui(SetujuiRetailRequest $request, Retailer $retailer): JsonResponse
     {
-        $retailer = $this->verifikasi->setujui($retailer, (int) $request->validated('sales_id'), $request->user());
+        $salesId = $request->validated('sales_id');
+        $retailer = $this->verifikasi->setujui($retailer, $salesId !== null ? (int) $salesId : null, $request->user());
 
         return $this->success(new RetailerResource($retailer), 'Pendaftaran disetujui. Toko kini dapat login.');
     }
