@@ -13,9 +13,12 @@ use Illuminate\Support\Facades\DB;
 class VerifikasiRetailService
 {
     /**
-     * Setujui pendaftaran: toko menjadi aktif, akun bisa login, dan Sales ditugaskan.
+     * Setujui pendaftaran: toko menjadi aktif dan akun bisa login.
+     *
+     * Penugasan Sales bersifat OPSIONAL (retail tidak terikat ke satu sales).
+     * Baris sales_assignments hanya dibuat jika $salesId diberikan.
      */
-    public function setujui(Retailer $retailer, int $salesId, User $admin): Retailer
+    public function setujui(Retailer $retailer, ?int $salesId, User $admin): Retailer
     {
         return DB::transaction(function () use ($retailer, $salesId, $admin) {
             $retailer = $this->kunciDanPastikanMenunggu($retailer);
@@ -29,10 +32,12 @@ class VerifikasiRetailService
 
             $retailer->user?->update(['is_active' => true]);
 
-            SalesAssignment::updateOrCreate(
-                ['sales_id' => $salesId, 'retailer_id' => $retailer->id],
-                ['ditugaskan_oleh' => $admin->id, 'mulai' => today(), 'selesai' => null, 'is_active' => true],
-            );
+            if ($salesId !== null) {
+                SalesAssignment::updateOrCreate(
+                    ['sales_id' => $salesId, 'retailer_id' => $retailer->id],
+                    ['ditugaskan_oleh' => $admin->id, 'mulai' => today(), 'selesai' => null, 'is_active' => true],
+                );
+            }
 
             AuditLog::catat(
                 $retailer,
@@ -40,7 +45,7 @@ class VerifikasiRetailService
                 StatusVerifikasi::Menunggu->value,
                 StatusVerifikasi::Disetujui->value,
                 null,
-                ['sales_id' => $salesId],
+                $salesId !== null ? ['sales_id' => $salesId] : [],
                 $admin->id,
             );
 
