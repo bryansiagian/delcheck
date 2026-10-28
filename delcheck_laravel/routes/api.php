@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\PendaftaranRetailController;
 use App\Http\Controllers\Api\Admin\SalesController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ProdukController;
 use App\Http\Controllers\Api\WilayahController;
 use Illuminate\Support\Facades\Route;
 
@@ -29,4 +30,20 @@ Route::middleware(['auth:sanctum', 'permission:retailer.verifikasi'])
         Route::get('pendaftaran-retail/{retailer}', [PendaftaranRetailController::class, 'show']);
         Route::post('pendaftaran-retail/{retailer}/setujui', [PendaftaranRetailController::class, 'setujui']);
         Route::post('pendaftaran-retail/{retailer}/tolak', [PendaftaranRetailController::class, 'tolak']);
+    });
+
+// ---------------------------------------------------------------- produk
+Route::middleware('auth:sanctum')
+    ->prefix('produk')
+    ->group(function () {
+        Route::middleware('permission:produk.lihat')->group(function () {
+            Route::get('/', [ProdukController::class, 'index']);
+            Route::get('{produk}', [ProdukController::class, 'show']);
+        });
+
+        Route::middleware('permission:produk.kelola')->group(function () {
+            Route::post('/', [ProdukController::class, 'store']);
+            Route::put('{produk}', [ProdukController::class, 'update']);
+            Route::delete('{produk}', [ProdukController::class, 'destroy']);
+        });
     });
