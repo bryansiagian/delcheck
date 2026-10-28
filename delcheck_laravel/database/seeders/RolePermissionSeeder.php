@@ -69,6 +69,9 @@ class RolePermissionSeeder extends Seeder
             // ---------------------------------------------------------------
             'warehouse' => [
                 'dashboard.lihat',
+                'produk.lihat',                  // katalog produk (keputusan MVP: Warehouse ikut mengelola)
+                'produk.kelola',                 // tambah/ubah/hapus produk
+                'stok.kelola',                   // tambah stok (halaman terpisah)
                 'analitik.sebaran-retail',       // UC-W01
                 'analitik.akar-masalah',         // UC-W02
                 'klaim.putuskan',                // UC-W03 (BR-03: hanya Warehouse)
