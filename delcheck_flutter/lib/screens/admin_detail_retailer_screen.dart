@@ -5,7 +5,9 @@ import '../core/api_client.dart';
 import '../models/retailer_pendaftar.dart';
 import '../services/admin_service.dart';
 
-/// Detail satu pendaftaran + aksi setujui / tolak (wajib alasan).
+/// Detail satu pendaftaran + aksi:
+///  - Menunggu : Tolak (wajib alasan) / Setujui
+///  - Ditolak  : Setujui ulang
 /// Menutup layar dengan `true` jika ada perubahan, supaya daftar dimuat ulang.
 class AdminDetailRetailerScreen extends StatefulWidget {
   const AdminDetailRetailerScreen({super.key, required this.retailer});
@@ -30,18 +32,22 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
   }
 
   Future<void> _setujui() async {
+    final ulang = r.ditolak;
     final yakin = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Setujui pendaftaran?'),
-        content: Text('${r.namaToko} akan diaktifkan dan dapat login.'),
+        title: Text(ulang ? 'Setujui ulang pendaftaran?' : 'Setujui pendaftaran?'),
+        content: Text(ulang
+            ? 'Pendaftaran ${r.namaToko} sebelumnya ditolak. '
+                'Jika disetujui ulang, toko diaktifkan dan dapat login.'
+            : '${r.namaToko} akan diaktifkan dan dapat login.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
               child: const Text('Batal')),
           FilledButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Setujui')),
+              child: Text(ulang ? 'Setujui ulang' : 'Setujui')),
         ],
       ),
     );
@@ -142,20 +148,22 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: r.menunggu
+      bottomNavigationBar: r.bisaDisetujui
           ? SafeArea(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _bekerja ? null : _tolak,
-                        icon: const Icon(Icons.close),
-                        label: const Text('Tolak'),
+                    if (r.bisaDitolak) ...[
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _bekerja ? null : _tolak,
+                          icon: const Icon(Icons.close),
+                          label: const Text('Tolak'),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
+                      const SizedBox(width: 12),
+                    ],
                     Expanded(
                       child: FilledButton.icon(
                         onPressed: _bekerja ? null : _setujui,
@@ -165,8 +173,8 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
                                 width: 16,
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2))
-                            : const Icon(Icons.check),
-                        label: const Text('Setujui'),
+                            : Icon(r.ditolak ? Icons.restore : Icons.check),
+                        label: Text(r.ditolak ? 'Setujui ulang' : 'Setujui'),
                       ),
                     ),
                   ],
