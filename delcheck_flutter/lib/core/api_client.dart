@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -55,6 +56,13 @@ class ApiClient {
   Future<Map<String, dynamic>> post(String path, {Map<String, dynamic>? body}) =>
       _send(() => _client.post(_uri(path),
           headers: _headers, body: jsonEncode(body ?? {})));
+
+  Future<Map<String, dynamic>> put(String path, {Map<String, dynamic>? body}) =>
+      _send(() => _client.put(_uri(path),
+          headers: _headers, body: jsonEncode(body ?? {})));
+
+  Future<Map<String, dynamic>> delete(String path) =>
+      _send(() => _client.delete(_uri(path), headers: _headers));
 
   Future<Map<String, dynamic>> _send(
       Future<http.Response> Function() request) async {
