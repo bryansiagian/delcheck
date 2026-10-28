@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import 'admin_verifikasi_screen.dart';
+import 'produk_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -33,6 +34,9 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
     final tema = Theme.of(context);
+
+    final admin = user?.punyaPeran('admin') ?? false;
+    final warehouse = user?.punyaPeran('warehouse') ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -85,7 +89,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           // Menu per peran. Menu yang belum punya onTap menampilkan "belum dihubungkan".
-          if (user?.punyaPeran('admin') ?? false)
+          if (admin)
             _MenuTile(
               ikon: Icons.verified_user_outlined,
               judul: 'Verifikasi Pendaftaran Retail',
@@ -94,6 +98,17 @@ class HomeScreen extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                     builder: (_) => const AdminVerifikasiScreen()),
+              ),
+            ),
+          // Admin dan Warehouse sama-sama mengelola katalog produk.
+          if (admin || warehouse)
+            _MenuTile(
+              ikon: Icons.inventory_2_outlined,
+              judul: 'Produk',
+              subjudul: 'Tambah, ubah, dan hapus produk',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProdukListScreen()),
               ),
             ),
           if (user?.punyaPeran('retail') ?? false)
@@ -106,12 +121,6 @@ class HomeScreen extends StatelessWidget {
             const _MenuTile(
               ikon: Icons.people_outline,
               judul: 'Toko Binaan',
-              subjudul: 'Segera hadir',
-            ),
-          if (user?.punyaPeran('warehouse') ?? false)
-            const _MenuTile(
-              ikon: Icons.warehouse_outlined,
-              judul: 'Gudang',
               subjudul: 'Segera hadir',
             ),
         ],
