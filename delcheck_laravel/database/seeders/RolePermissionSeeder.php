@@ -13,6 +13,9 @@ use Spatie\Permission\PermissionRegistrar;
  * Izin dengan akhiran "-sendiri" / "-binaan" / "-semua" hanya menyatakan CAKUPAN
  * yang boleh dilihat. Pembatasan datanya (mis. Sales hanya toko binaan, BR-05)
  * tetap harus diterapkan di Policy atau query scope.
+ *
+ * Catatan MVP: Retail tidak terikat ke satu Sales, jadi "pesanan.lihat-binaan"
+ * diterapkan sebagai "semua pesanan" untuk Sales.
  */
 class RolePermissionSeeder extends Seeder
 {
@@ -71,7 +74,11 @@ class RolePermissionSeeder extends Seeder
                 'dashboard.lihat',
                 'produk.lihat',                  // katalog produk (keputusan MVP: Warehouse ikut mengelola)
                 'produk.kelola',                 // tambah/ubah/hapus produk
-                'stok.kelola',                   // tambah stok (halaman terpisah)
+                'stok.kelola',                   // tambah/kurangi stok
+                'pesanan.lihat-semua',           // pesanan yang perlu dikirim
+                'pesanan.proses',                // serahkan ke kurir
+                'pengiriman.pantau',
+                'pengiriman.perbarui',           // tandai dalam perjalanan
                 'analitik.sebaran-retail',       // UC-W01
                 'analitik.akar-masalah',         // UC-W02
                 'klaim.putuskan',                // UC-W03 (BR-03: hanya Warehouse)
