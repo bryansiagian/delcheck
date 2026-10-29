@@ -8,21 +8,25 @@ use App\Http\Resources\MutasiStokResource;
 use App\Http\Resources\StokResource;
 use App\Models\MutasiStok;
 use App\Models\Produk;
-use App\Models\StokProduk;
+use App\Services\StokService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 /**
  * Stok produk (izin stok.kelola: Admin dan Warehouse).
  * Setiap perubahan dicatat di mutasi_stok; stok tidak pernah boleh negatif.
+ * Logika perubahan stok ada di StokService (dipakai juga oleh pengiriman pesanan).
  */
 class StokController extends Controller
 {
     use ApiResponse;
+
+    public function __construct(private StokService $stok)
+    {
+    }
 
     /** GET /api/stok?q=&status=menipis&per_page=15 */
     public function index(Request $request): JsonResponse
@@ -76,35 +80,16 @@ class StokController extends Controller
     public function ubah(MutasiStokRequest $request, Produk $produk): JsonResponse
     {
         $data = $request->validated();
-        $jumlah = (int) $data['jumlah'];
         $keluar = $data['tipe'] === 'keluar';
 
-        DB::transaction(function () use ($produk, $data, $jumlah, $keluar, $request) {
-            StokProduk::firstOrCreate(['produk_id' => $produk->id], ['jumlah' => 0]);
-
-            // Kunci baris agar dua perubahan bersamaan tidak saling menimpa.
-            $stok = StokProduk::where('produk_id', $produk->id)->lockForUpdate()->firstOrFail();
-
-            $sebelum = (int) $stok->jumlah;
-            $sesudah = $keluar ? $sebelum - $jumlah : $sebelum + $jumlah;
-
-            if ($sesudah < 0) {
-                throw ValidationException::withMessages([
-                    'jumlah' => "Stok tidak mencukupi. Stok saat ini: {$sebelum}.",
-                ]);
-            }
-
-            $stok->update(['jumlah' => $sesudah]);
-
-            MutasiStok::create([
-                'produk_id' => $produk->id,
-                'tipe' => $data['tipe'],
-                'jumlah' => $keluar ? -$jumlah : $jumlah,
-                'stok_sebelum' => $sebelum,
-                'stok_sesudah' => $sesudah,
-                'alasan' => $data['alasan'] ?? null,
-                'dibuat_oleh' => $request->user()->id,
-            ]);
+        DB::transaction(function () use ($produk, $data, $request) {
+            $this->stok->ubah(
+                $produk->id,
+                $data['tipe'],
+                (int) $data['jumlah'],
+                $data['alasan'] ?? null,
+                $request->user(),
+            );
         });
 
         return $this->success(
