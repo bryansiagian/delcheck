@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
 import 'admin_verifikasi_screen.dart';
+import 'buat_pesanan_screen.dart';
+import 'pesanan_list_screen.dart';
 import 'produk_list_screen.dart';
 import 'stok_list_screen.dart';
 
@@ -31,6 +33,10 @@ class HomeScreen extends StatelessWidget {
     }
   }
 
+  void _buka(BuildContext context, Widget layar) {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => layar));
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
@@ -38,6 +44,8 @@ class HomeScreen extends StatelessWidget {
 
     final admin = user?.punyaPeran('admin') ?? false;
     final warehouse = user?.punyaPeran('warehouse') ?? false;
+    final retail = user?.punyaPeran('retail') ?? false;
+    final sales = user?.punyaPeran('sales') ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -89,51 +97,102 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          // Menu per peran. Menu yang belum punya onTap menampilkan "belum dihubungkan".
+
+          // ---- Retail
+          if (retail) ...[
+            _MenuTile(
+              ikon: Icons.add_shopping_cart,
+              judul: 'Pesan Produk',
+              subjudul: 'Pilih produk dan kirim pesanan',
+              onTap: () => _buka(context, const BuatPesananScreen()),
+            ),
+            _MenuTile(
+              ikon: Icons.receipt_long_outlined,
+              judul: 'Pesanan Saya',
+              subjudul: 'Pantau status dan konfirmasi barang diterima',
+              onTap: () => _buka(
+                context,
+                const PesananListScreen(
+                  judul: 'Pesanan Saya',
+                  bisaBuat: true,
+                  filter: [
+                    PesananFilter('Semua', null),
+                    PesananFilter('Menunggu', 'menunggu_konfirmasi_sales'),
+                    PesananFilter('Diproses', 'dikonfirmasi,diproses'),
+                    PesananFilter('Dalam perjalanan', 'dikirim'),
+                    PesananFilter('Diterima', 'diterima,selesai'),
+                    PesananFilter('Ditolak / batal', 'ditolak,dibatalkan'),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
+          // ---- Sales
+          if (sales)
+            _MenuTile(
+              ikon: Icons.fact_check_outlined,
+              judul: 'Konfirmasi Pesanan',
+              subjudul: 'Setujui atau tolak pesanan dari toko',
+              onTap: () => _buka(
+                context,
+                const PesananListScreen(
+                  judul: 'Konfirmasi Pesanan',
+                  tampilkanToko: true,
+                  filter: [
+                    PesananFilter('Menunggu', 'menunggu_konfirmasi_sales'),
+                    PesananFilter('Disetujui',
+                        'dikonfirmasi,diproses,dikirim,diterima,selesai'),
+                    PesananFilter('Ditolak', 'ditolak'),
+                    PesananFilter('Semua', null),
+                  ],
+                ),
+              ),
+            ),
+
+          // ---- Admin
           if (admin)
             _MenuTile(
               ikon: Icons.verified_user_outlined,
               judul: 'Verifikasi Pendaftaran Retail',
               subjudul: 'Setujui atau tolak toko yang mendaftar',
-              onTap: () => Navigator.push(
+              onTap: () => _buka(context, const AdminVerifikasiScreen()),
+            ),
+
+          // ---- Admin dan Warehouse
+          if (admin || warehouse) ...[
+            _MenuTile(
+              ikon: Icons.local_shipping_outlined,
+              judul: 'Pengiriman',
+              subjudul: 'Atur pengiriman pesanan yang sudah disetujui',
+              onTap: () => _buka(
                 context,
-                MaterialPageRoute(
-                    builder: (_) => const AdminVerifikasiScreen()),
+                const PesananListScreen(
+                  judul: 'Pengiriman',
+                  tampilkanToko: true,
+                  filter: [
+                    PesananFilter('Siap kirim', 'dikonfirmasi'),
+                    PesananFilter('Bersama kurir', 'diproses'),
+                    PesananFilter('Dalam perjalanan', 'dikirim'),
+                    PesananFilter('Diterima', 'diterima,selesai'),
+                    PesananFilter('Semua', null),
+                  ],
+                ),
               ),
             ),
-          // Admin dan Warehouse sama-sama mengelola produk dan stok.
-          if (admin || warehouse) ...[
             _MenuTile(
               ikon: Icons.inventory_2_outlined,
               judul: 'Produk',
               subjudul: 'Tambah, ubah, dan hapus produk',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProdukListScreen()),
-              ),
+              onTap: () => _buka(context, const ProdukListScreen()),
             ),
             _MenuTile(
               ikon: Icons.warehouse_outlined,
               judul: 'Stok',
               subjudul: 'Tambah atau kurangi stok, lihat riwayat',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const StokListScreen()),
-              ),
+              onTap: () => _buka(context, const StokListScreen()),
             ),
           ],
-          if (user?.punyaPeran('retail') ?? false)
-            const _MenuTile(
-              ikon: Icons.storefront_outlined,
-              judul: 'Toko Saya',
-              subjudul: 'Segera hadir',
-            ),
-          if (user?.punyaPeran('sales') ?? false)
-            const _MenuTile(
-              ikon: Icons.people_outline,
-              judul: 'Toko Binaan',
-              subjudul: 'Segera hadir',
-            ),
         ],
       ),
     );
@@ -145,13 +204,13 @@ class _MenuTile extends StatelessWidget {
     required this.ikon,
     required this.judul,
     required this.subjudul,
-    this.onTap,
+    required this.onTap,
   });
 
   final IconData ikon;
   final String judul;
   final String subjudul;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -161,12 +220,7 @@ class _MenuTile extends StatelessWidget {
         title: Text(judul),
         subtitle: Text(subjudul),
         trailing: const Icon(Icons.chevron_right),
-        onTap: onTap ??
-            () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Fitur ini belum dihubungkan.')),
-              );
-            },
+        onTap: onTap,
       ),
     );
   }
