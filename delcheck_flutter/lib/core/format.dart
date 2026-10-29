@@ -1,3 +1,5 @@
+String _dua(int n) => n.toString().padLeft(2, '0');
+
 /// Angka dengan pemisah ribuan, mis. 95000 -> "95.000".
 String formatAngka(num nilai) {
   final bulat = nilai.round();
@@ -18,9 +20,17 @@ String formatRupiah(num nilai) {
       : 'Rp ${formatAngka(nilai)}';
 }
 
+/// Tanggal lokal, mis. "28/10/2026".
+String formatTanggal(DateTime d) {
+  final l = d.toLocal();
+  return '${_dua(l.day)}/${_dua(l.month)}/${l.year}';
+}
+
 /// Tanggal dan jam lokal, mis. "28/10/2026 14:05".
 String formatTanggalJam(DateTime d) {
   final l = d.toLocal();
-  String dua(int n) => n.toString().padLeft(2, '0');
-  return '${dua(l.day)}/${dua(l.month)}/${l.year} ${dua(l.hour)}:${dua(l.minute)}';
+  return '${formatTanggal(l)} ${_dua(l.hour)}:${_dua(l.minute)}';
 }
+
+/// Format tanggal untuk dikirim ke API, mis. "2026-10-28".
+String tanggalApi(DateTime d) => '${d.year}-${_dua(d.month)}-${_dua(d.day)}';
