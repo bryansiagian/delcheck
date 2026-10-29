@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\PendaftaranRetailController;
 use App\Http\Controllers\Api\Admin\SalesController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\PesananController;
 use App\Http\Controllers\Api\ProdukController;
 use App\Http\Controllers\Api\StokController;
 use App\Http\Controllers\Api\WilayahController;
@@ -57,4 +58,27 @@ Route::middleware(['auth:sanctum', 'permission:stok.kelola'])
         Route::get('{produk}', [StokController::class, 'show']);
         Route::get('{produk}/mutasi', [StokController::class, 'riwayat']);
         Route::post('{produk}/mutasi', [StokController::class, 'ubah']);
+    });
+
+// --------------------------------------------------------------- pesanan
+Route::middleware('auth:sanctum')
+    ->prefix('pesanan')
+    ->group(function () {
+        $lihat = 'permission:pesanan.lihat-semua|pesanan.lihat-binaan|pesanan.lihat-sendiri';
+
+        Route::get('/', [PesananController::class, 'index'])->middleware($lihat);
+        Route::get('{pesanan}', [PesananController::class, 'show'])->middleware($lihat);
+
+        // Retail
+        Route::post('/', [PesananController::class, 'store'])->middleware('permission:pesanan.buat');
+        Route::post('{pesanan}/batalkan', [PesananController::class, 'batalkan'])->middleware('permission:pesanan.buat');
+        Route::post('{pesanan}/terima', [PesananController::class, 'terima'])->middleware('permission:pesanan.terima');
+
+        // Sales
+        Route::post('{pesanan}/setujui', [PesananController::class, 'setujui'])->middleware('permission:pesanan.konfirmasi');
+        Route::post('{pesanan}/tolak', [PesananController::class, 'tolak'])->middleware('permission:pesanan.konfirmasi');
+
+        // Warehouse / Admin
+        Route::post('{pesanan}/proses', [PesananController::class, 'proses'])->middleware('permission:pesanan.proses');
+        Route::post('{pesanan}/kirim', [PesananController::class, 'kirim'])->middleware('permission:pengiriman.perbarui');
     });
