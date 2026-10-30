@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\PesananController;
 use App\Http\Controllers\Api\ProdukController;
 use App\Http\Controllers\Api\StokController;
 use App\Http\Controllers\Api\WilayahController;
+use App\Http\Controllers\Api\Admin\PenggunaController;
 use Illuminate\Support\Facades\Route;
 
 // ---------------------------------------------------------------- publik
@@ -32,6 +33,14 @@ Route::middleware(['auth:sanctum', 'permission:retailer.verifikasi'])
         Route::get('pendaftaran-retail/{retailer}', [PendaftaranRetailController::class, 'show']);
         Route::post('pendaftaran-retail/{retailer}/setujui', [PendaftaranRetailController::class, 'setujui']);
         Route::post('pendaftaran-retail/{retailer}/tolak', [PendaftaranRetailController::class, 'tolak']);
+    });
+
+Route::middleware(['auth:sanctum', 'permission:pengguna.kelola'])
+    ->prefix('admin')
+    ->group(function () {
+        Route::get('pengguna', [PenggunaController::class, 'index']);
+        Route::post('pengguna/{user}/aktifkan', [PenggunaController::class, 'aktifkan']);
+        Route::post('pengguna/{user}/nonaktifkan', [PenggunaController::class, 'nonaktifkan']);
     });
 
 // ---------------------------------------------------------------- produk
