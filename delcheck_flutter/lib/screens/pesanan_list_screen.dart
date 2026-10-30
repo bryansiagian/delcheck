@@ -7,20 +7,19 @@ import '../core/api_client.dart';
 import '../core/format.dart';
 import '../models/pesanan.dart';
 import '../services/pesanan_service.dart';
-import '../widgets/status_pesanan_chip.dart';
 import 'buat_pesanan_screen.dart';
 import 'pesanan_detail_screen.dart';
 
-/// Satu pilihan filter status. [status] null = semua; boleh beberapa nilai
-/// dipisah koma (mis. "dikonfirmasi,diproses").
+/// Satu pilihan filter status
 class PesananFilter {
-  const PesananFilter(this.label, this.status);
+  const PesananFilter(this.label, this.status, {this.icon = Icons.layers});
 
   final String label;
   final String? status;
+  final IconData icon;
 }
 
-/// Daftar pesanan. Dipakai Retail, Sales, dan Warehouse/Admin dengan filter berbeda.
+/// Layar Daftar Pengiriman & Pesanan Modern
 class PesananListScreen extends StatefulWidget {
   const PesananListScreen({
     super.key,
@@ -32,11 +31,7 @@ class PesananListScreen extends StatefulWidget {
 
   final String judul;
   final List<PesananFilter> filter;
-
-  /// Tampilkan nama toko di tiap baris (untuk Sales dan Warehouse/Admin).
   final bool tampilkanToko;
-
-  /// Tampilkan tombol "Pesan produk" (Retail).
   final bool bisaBuat;
 
   @override
@@ -55,11 +50,17 @@ class _PesananListScreenState extends State<PesananListScreen> {
   int _halaman = 0;
   int _halamanTerakhir = 1;
   int _total = 0;
-  int _reqId = 0; // mencegah hasil permintaan lama menimpa yang baru
+  int _reqId = 0;
 
   bool _memuat = false;
   bool _memuatLagi = false;
   String? _error;
+
+  // Warna sesuai spesifikasi Tailwind
+  static const Color _bgSurface = Color(0xFFF8F9FF);
+  static const Color _primary = Color(0xFF2563EB);
+  static const Color _textDark = Color(0xFF0F172A);
+  static const Color _textMuted = Color(0xFF64748B);
 
   bool get _adaLagi => _halaman < _halamanTerakhir;
   String? get _status => widget.filter[_filterIndex].status;
@@ -144,7 +145,7 @@ class _PesananListScreenState extends State<PesananListScreen> {
 
   void _onCari(String teks) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
+    _debounce = Timer(const Duration(milliseconds: 400), () {
       if (teks.trim() == _q) return;
       setState(() {
         _q = teks.trim();
@@ -159,7 +160,6 @@ class _PesananListScreenState extends State<PesananListScreen> {
       context,
       MaterialPageRoute(builder: (_) => PesananDetailScreen(id: p.id)),
     );
-    // Status mungkin berubah di layar detail; muat ulang daftar.
     if (mounted) _muatAwal();
   }
 
@@ -171,193 +171,628 @@ class _PesananListScreenState extends State<PesananListScreen> {
     if (mounted) _muatAwal();
   }
 
+  String _ambilInisial(String nama) {
+    if (nama.trim().isEmpty) return 'TK';
+    final parts = nama.trim().split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return nama.substring(0, nama.length >= 2 ? 2 : 1).toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.judul)),
+      backgroundColor: _bgSurface,
       floatingActionButton: widget.bisaBuat
           ? FloatingActionButton.extended(
               onPressed: _pesanBaru,
+              backgroundColor: _primary,
+              foregroundColor: Colors.white,
               icon: const Icon(Icons.add_shopping_cart),
               label: const Text('Pesan produk'),
             )
           : null,
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              controller: _cariCtrl,
-              onChanged: (v) {
-                setState(() {}); // memperbarui tombol hapus teks
-                _onCari(v);
-              },
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: widget.tampilkanToko
-                    ? 'Cari nomor pesanan atau nama toko'
-                    : 'Cari nomor pesanan',
-                prefixIcon: const Icon(Icons.search),
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: _cariCtrl.text.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _cariCtrl.clear();
-                          _onCari('');
-                          setState(() {});
-                        },
+          // ================= 1. HEADER BIRU GRADIENT =================
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 44, 16, 38),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF1D4ED8), Color(0xFF3B82F6)],
+              ),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(28),
+                bottomRight: Radius.circular(28),
+              ),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: () => Navigator.pop(context),
+                      borderRadius: BorderRadius.circular(24),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.arrow_back,
+                            color: Colors.white, size: 22),
                       ),
+                    ),
+                    const SizedBox(width: 14),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.judul,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Text(
+                          'Pantau dan catat pengiriman pesanan',
+                          style: TextStyle(
+                            color: Color(0xFFDBEAFE),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Search Input
+                Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _cariCtrl,
+                    onChanged: (v) {
+                      setState(() {});
+                      _onCari(v);
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Cari nomor pesanan atau nama toko',
+                      hintStyle:
+                          const TextStyle(color: _textMuted, fontSize: 13),
+                      prefixIcon: const Icon(Icons.search,
+                          color: _textMuted, size: 22),
+                      suffixIcon: _cariCtrl.text.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear, size: 20),
+                              onPressed: () {
+                                _cariCtrl.clear();
+                                _onCari('');
+                                setState(() {});
+                              },
+                            ),
+                      border: InputBorder.none,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ================= 2. STATUS FILTER HORIZONTAL =================
+          Transform.translate(
+            offset: const Offset(0, -24),
+            child: SizedBox(
+              height: 98,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: widget.filter.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 10),
+                itemBuilder: (context, i) {
+                  final item = widget.filter[i];
+                  final isAktif = _filterIndex == i;
+
+                  // Tentukan warna filter card
+                  Color iconBg = const Color(0xFFDBEAFE);
+                  Color iconColor = _primary;
+
+                  if (item.label.toLowerCase().contains('siap')) {
+                    iconBg = const Color(0xFFFFEDD5);
+                    iconColor = const Color(0xFFF97316);
+                  } else if (item.label.toLowerCase().contains('kurir')) {
+                    iconBg = const Color(0xFFE0E7FF);
+                    iconColor = const Color(0xFF4F46E5);
+                  } else if (item.label.toLowerCase().contains('jalan')) {
+                    iconBg = const Color(0xFFDBEAFE);
+                    iconColor = _primary;
+                  } else if (item.label.toLowerCase().contains('terima')) {
+                    iconBg = const Color(0xFFCCFBF1);
+                    iconColor = const Color(0xFF0D9488);
+                  }
+
+                  return InkWell(
+                    onTap: () => _gantiFilter(i),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      width: 104,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isAktif ? const Color(0xFFEFF6FF) : Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: isAktif ? _primary : Colors.transparent,
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: iconBg,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(item.icon, color: iconColor, size: 20),
+                          ),
+                          Column(
+                            children: [
+                              Text(
+                                isAktif ? '$_total' : '-',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: isAktif ? _primary : _textDark,
+                                ),
+                              ),
+                              Text(
+                                item.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: isAktif
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: isAktif ? _primary : _textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
-          SizedBox(
-            height: 48,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              itemCount: widget.filter.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, i) => ChoiceChip(
-                label: Text(widget.filter[i].label),
-                selected: _filterIndex == i,
-                onSelected: (_) => _gantiFilter(i),
+
+          // ================= 3. INFO ROW =================
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Menampilkan $_total pengiriman',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _textMuted,
+                ),
               ),
             ),
           ),
-          if (!_memuat && _error == null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('$_total pesanan',
-                    style: Theme.of(context).textTheme.bodySmall),
-              ),
-            ),
-          Expanded(child: _isi()),
+
+          // ================= 4. LIST PENGIRIMAN =================
+          Expanded(child: _isiKonten()),
         ],
       ),
     );
   }
 
-  Widget _isi() {
+  Widget _isiKonten() {
     if (_memuat && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: _primary));
     }
     if (_error != null && _items.isEmpty) {
-      return _Pesan(
-        ikon: Icons.cloud_off_outlined,
-        teks: _error!,
-        aksi: FilledButton.tonal(
-            onPressed: _muatAwal, child: const Text('Coba lagi')),
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.cloud_off_rounded, size: 48, color: _textMuted),
+            const SizedBox(height: 12),
+            Text(_error!, style: const TextStyle(color: _textMuted)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+                onPressed: _muatAwal, child: const Text('Coba Lagi')),
+          ],
+        ),
       );
     }
     if (_items.isEmpty) {
       return RefreshIndicator(
         onRefresh: _muatAwal,
+        color: _primary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: const [
-            SizedBox(height: 120),
-            _Pesan(
-              ikon: Icons.receipt_long_outlined,
-              teks: 'Belum ada pesanan pada filter ini.',
+            SizedBox(height: 80),
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.inbox_rounded, size: 54, color: Color(0xFFCBD5E1)),
+                  SizedBox(height: 12),
+                  Text(
+                    'Tidak ada pengiriman pada filter ini',
+                    style: TextStyle(
+                        color: _textMuted, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       );
     }
 
-    final tema = Theme.of(context);
-
     return RefreshIndicator(
       onRefresh: _muatAwal,
-      child: ListView.builder(
+      color: _primary,
+      child: ListView.separated(
         controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.fromLTRB(16, 8, 16, widget.bisaBuat ? 96 : 24),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
         itemCount: _items.length + (_adaLagi ? 1 : 0),
+        separatorBuilder: (_, __) => const SizedBox(height: 14),
         itemBuilder: (context, i) {
           if (i >= _items.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(
+                  child: CircularProgressIndicator(strokeWidth: 2.5)),
             );
           }
           final p = _items[i];
-          final keterangan = [
-            if (widget.tampilkanToko && p.tokoNama != null) p.tokoNama!,
-            if (p.dibuat != null) formatTanggalJam(p.dibuat!),
-            '${p.jumlahItem} item',
-          ].join(' • ');
-
-          return Card(
-            child: InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => _buka(p),
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(p.nomor,
-                              style: tema.textTheme.titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 4),
-                          Text(keterangan, style: tema.textTheme.bodySmall),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(formatRupiah(p.total),
-                            style: tema.textTheme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        StatusPesananChip(status: p.status),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
+          return _buildPengirimanCard(p);
         },
       ),
     );
   }
-}
 
-class _Pesan extends StatelessWidget {
-  const _Pesan({required this.ikon, required this.teks, this.aksi});
+  // --- KARTU PENGIRIMAN SESUAI DESAIN HTML ---
+  Widget _buildPengirimanCard(Pesanan p) {
+    final statusNorm = p.status.toLowerCase();
 
-  final IconData ikon;
-  final String teks;
-  final Widget? aksi;
+    // Status Styling Data
+    Color statusBg = const Color(0xFFFFEDD5);
+    Color statusColor = const Color(0xFFF97316);
+    IconData statusIcon = Icons.inventory_2_rounded;
+    String statusText = 'Siap dikirim';
+    int stepActive = 1; // 1: Siap, 2: Kurir, 3: Jalan, 4: Diterima
 
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(ikon, size: 48, color: Theme.of(context).disabledColor),
-            const SizedBox(height: 12),
-            Text(teks, textAlign: TextAlign.center),
-            if (aksi != null) ...[const SizedBox(height: 16), aksi!],
-          ],
-        ),
+    if (statusNorm == 'diproses') {
+      statusBg = const Color(0xFFE0E7FF);
+      statusColor = const Color(0xFF4F46E5);
+      statusIcon = Icons.person_pin_circle_rounded;
+      statusText = 'Bersama kurir';
+      stepActive = 2;
+    } else if (statusNorm == 'dikirim') {
+      statusBg = const Color(0xFFDBEAFE);
+      statusColor = _primary;
+      statusIcon = Icons.local_shipping_rounded;
+      statusText = 'Dalam perjalanan';
+      stepActive = 3;
+    } else if (statusNorm == 'diterima' || statusNorm == 'selesai') {
+      statusBg = const Color(0xFFCCFBF1);
+      statusColor = const Color(0xFF0D9488);
+      statusIcon = Icons.check_circle_rounded;
+      statusText = 'Diterima';
+      stepActive = 4;
+    }
+
+    final namaToko = p.tokoNama ?? 'Retail Store';
+    final inisial = _ambilInisial(namaToko);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. Top Row: Nomor & Status Chip
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '#${p.nomor}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: _textDark,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    p.dibuat != null ? formatTanggalJam(p.dibuat!) : '',
+                    style: const TextStyle(fontSize: 11, color: _textMuted),
+                  ),
+                ],
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    Icon(statusIcon, color: statusColor, size: 14),
+                    const SizedBox(width: 5),
+                    Text(
+                      statusText,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // 2. Store Row
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  inisial,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      namaToko,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: _textDark,
+                      ),
+                    ),
+                    const Text(
+                      'Wilayah Pengiriman Retail',
+                      style: TextStyle(fontSize: 11, color: _textMuted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // 3. Meta Row (Items & Total Rupiah)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: const BoxDecoration(
+              border: Border(
+                top: BorderSide(color: Color(0xFFF1F5F9)),
+              ),
+            ),
+            child: Row(
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.inventory_2_outlined,
+                        size: 15, color: _textMuted),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${p.jumlahItem} item',
+                      style: const TextStyle(fontSize: 12, color: _textMuted),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 18),
+                Row(
+                  children: [
+                    const Icon(Icons.account_balance_wallet_outlined,
+                        size: 15, color: _textMuted),
+                    const SizedBox(width: 4),
+                    Text(
+                      formatRupiah(p.total),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: _textDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // 4. Mini Progress Tracker 4 Tahap
+          _buildProgressTracker(stepActive, statusColor),
+          const SizedBox(height: 14),
+
+          // 5. Tombol Aksi Sesuai Status
+          if (stepActive == 1) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: ElevatedButton.icon(
+                onPressed: () => _buka(p),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                icon: const Icon(Icons.edit_note_rounded, size: 20),
+                label: const Text(
+                  'Catat pengiriman',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ] else if (stepActive == 2 || stepActive == 3) ...[
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: OutlinedButton.icon(
+                onPressed: () => _buka(p),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _primary,
+                  side: const BorderSide(color: _primary),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                icon: const Icon(Icons.sync_rounded, size: 20),
+                label: const Text(
+                  'Perbarui status',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ] else ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFCCFBF1).withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.check_circle_rounded,
+                      color: Color(0xFF0D9488), size: 18),
+                  SizedBox(width: 8),
+                  Text(
+                    'Pengiriman Telah Selesai Diterima',
+                    style: TextStyle(
+                      color: Color(0xFF0D9488),
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // --- WIDGET HELPER: Mini Progress Tracker ---
+  Widget _buildProgressTracker(int activeStep, Color themeColor) {
+    const steps = ['Siap', 'Kurir', 'Jalan', 'Diterima'];
+
+    return Row(
+      children: List.generate(steps.length * 2 - 1, (index) {
+        if (index.isOdd) {
+          // Garis penghubung
+          final stepIndex = (index ~/ 2) + 1;
+          final isLineActive = stepIndex < activeStep;
+          return Expanded(
+            child: Container(
+              height: 2,
+              color: isLineActive ? themeColor : const Color(0xFFE2E8F0),
+            ),
+          );
+        } else {
+          // Lingkaran step
+          final stepIndex = (index ~/ 2) + 1;
+          final isStepPassed = stepIndex <= activeStep;
+
+          return Column(
+            children: [
+              Container(
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: isStepPassed ? themeColor : const Color(0xFFE2E8F0),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                ),
+                child: isStepPassed
+                    ? const Icon(Icons.check, size: 12, color: Colors.white)
+                    : null,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                steps[index ~/ 2],
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight:
+                      isStepPassed ? FontWeight.bold : FontWeight.w500,
+                  color: isStepPassed ? themeColor : const Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          );
+        }
+      }),
     );
   }
 }
