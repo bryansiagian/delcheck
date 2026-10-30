@@ -9,7 +9,7 @@ import '../models/stok.dart';
 import '../services/stok_service.dart';
 import 'stok_detail_screen.dart';
 
-/// Daftar stok semua produk untuk Admin dan Warehouse.
+/// Daftar stok semua produk untuk Admin dan Warehouse dengan UI modern
 class StokListScreen extends StatefulWidget {
   const StokListScreen({super.key});
 
@@ -18,6 +18,21 @@ class StokListScreen extends StatefulWidget {
 }
 
 class _StokListScreenState extends State<StokListScreen> {
+  // Palet Warna sesuai Tailwind HTML
+  static const Color _bgSurface = Color(0xFFF8F9FF);
+  static const Color _primary = Color(0xFF2563EB);
+  static const Color _primaryDark = Color(0xFF1D4ED8);
+  static const Color _textDark = Color(0xFF0B1C30);
+  static const Color _textMuted = Color(0xFF4D556B);
+  static const Color _outline = Color(0xFF737686);
+
+  static const Color _warningBg = Color(0xFFFFDBCA);
+  static const Color _warningColor = Color(0xFF9D4300);
+  static const Color _warningBar = Color(0xFFFD761A);
+
+  static const Color _errorBg = Color(0xFFFFDAD6);
+  static const Color _errorColor = Color(0xFFBA1A1A);
+
   late final StokService _service;
   final _scroll = ScrollController();
   final _cariCtrl = TextEditingController();
@@ -29,7 +44,8 @@ class _StokListScreenState extends State<StokListScreen> {
   int _halaman = 0;
   int _halamanTerakhir = 1;
   int _total = 0;
-  int _reqId = 0; // mencegah hasil permintaan lama menimpa yang baru
+  int _totalMenipisCount = 0;
+  int _reqId = 0;
 
   bool _memuat = false;
   bool _memuatLagi = false;
@@ -65,10 +81,12 @@ class _StokListScreenState extends State<StokListScreen> {
       _memuat = true;
       _error = null;
     });
+
     try {
       final h = await _service.daftar(
           q: _q, menipis: _hanyaMenipis, halaman: 1);
       if (!mounted || id != _reqId) return;
+
       setState(() {
         _items
           ..clear()
@@ -77,6 +95,17 @@ class _StokListScreenState extends State<StokListScreen> {
         _halamanTerakhir = h.halamanTerakhir;
         _total = h.total;
       });
+
+      // Ambil juga hitungan produk menipis untuk badge tab jika sedang di tab semua
+      if (!_hanyaMenipis) {
+        _service.daftar(menipis: true, halaman: 1).then((res) {
+          if (mounted) {
+            setState(() => _totalMenipisCount = res.total);
+          }
+        }).catchError((_) {});
+      } else {
+        _totalMenipisCount = h.total;
+      }
     } on ApiException catch (e) {
       if (mounted && id == _reqId) setState(() => _error = e.message);
     } finally {
@@ -118,7 +147,7 @@ class _StokListScreenState extends State<StokListScreen> {
 
   void _onCari(String teks) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
+    _debounce = Timer(const Duration(milliseconds: 400), () {
       if (teks.trim() == _q) return;
       setState(() {
         _q = teks.trim();
@@ -133,70 +162,370 @@ class _StokListScreenState extends State<StokListScreen> {
       context,
       MaterialPageRoute(builder: (_) => StokDetailScreen(stok: stok)),
     );
-    // Stok mungkin berubah di layar detail; muat ulang daftar.
     if (mounted) _muatAwal();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Stok Produk')),
+      backgroundColor: _bgSurface,
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            child: TextField(
-              controller: _cariCtrl,
-              onChanged: (v) {
-                setState(() {}); // memperbarui tombol hapus teks
-                _onCari(v);
-              },
-              textInputAction: TextInputAction.search,
-              decoration: InputDecoration(
-                hintText: 'Cari nama atau kode produk',
-                prefixIcon: const Icon(Icons.search),
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: _cariCtrl.text.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _cariCtrl.clear();
-                          _onCari('');
-                          setState(() {});
-                        },
-                      ),
+          // ================= 1. HEADER BIRU GRADIENT =================
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 44, 16, 36),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [_primaryDark, Color(0xFF3B82F6)],
               ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Wrap(
-              spacing: 8,
-              children: [
-                ChoiceChip(
-                  label: const Text('Semua'),
-                  selected: !_hanyaMenipis,
-                  onSelected: (_) => _gantiFilter(false),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(28),
+                bottomRight: Radius.circular(28),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Color(0x291D4ED8),
+                  blurRadius: 16,
+                  offset: Offset(0, 4),
                 ),
-                ChoiceChip(
-                  label: const Text('Menipis / habis'),
-                  selected: _hanyaMenipis,
-                  onSelected: (_) => _gantiFilter(true),
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        InkWell(
+                          onTap: () => Navigator.pop(context),
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.arrow_back,
+                                color: Colors.white, size: 22),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Stok Produk',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Pantau dan perbarui jumlah stok',
+                              style: TextStyle(
+                                color: Color(0xFFDBEAFE),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.inventory_2_rounded,
+                          color: Colors.white, size: 20),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Search Bar
+                Container(
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: TextField(
+                    controller: _cariCtrl,
+                    onChanged: (v) {
+                      setState(() {});
+                      _onCari(v);
+                    },
+                    decoration: InputDecoration(
+                      hintText: 'Cari nama produk atau SKU',
+                      hintStyle:
+                          const TextStyle(color: _outline, fontSize: 13),
+                      prefixIcon: const Icon(Icons.search,
+                          color: _outline, size: 22),
+                      suffixIcon: _cariCtrl.text.isEmpty
+                          ? null
+                          : IconButton(
+                              icon: const Icon(Icons.clear, size: 20),
+                              onPressed: () {
+                                _cariCtrl.clear();
+                                _onCari('');
+                                setState(() {});
+                              },
+                            ),
+                      border: InputBorder.none,
+                      contentPadding:
+                          const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
-          if (!_memuat && _error == null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text('$_total produk',
-                    style: Theme.of(context).textTheme.bodySmall),
+
+          // ================= 2. DUAL INTERACTIVE TILES MELAYANG =================
+          Transform.translate(
+            offset: const Offset(0, -22),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F172A).withOpacity(0.08),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    // Tile 1: Semua Produk
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _gantiFilter(false),
+                        borderRadius: BorderRadius.circular(18),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: !_hanyaMenipis
+                                ? const Color(0xFFE5EEFF)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Stack(
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFD3E4FE),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.layers_rounded,
+                                        color: _primary, size: 18),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Semua produk',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: _primary,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Katalog aktif',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: _textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    !_hanyaMenipis ? '$_total' : '-',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: _primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (!_hanyaMenipis)
+                                Positioned(
+                                  bottom: 0,
+                                  left: 6,
+                                  right: 6,
+                                  child: Container(
+                                    height: 2.5,
+                                    decoration: BoxDecoration(
+                                      color: _primary,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(width: 1, height: 36, color: const Color(0xFFE5EEFF)),
+                    // Tile 2: Menipis / Habis
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => _gantiFilter(true),
+                        borderRadius: BorderRadius.circular(18),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _hanyaMenipis
+                                ? _warningBg.withOpacity(0.5)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Stack(
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: const BoxDecoration(
+                                      color: _warningBg,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: _warningColor,
+                                        size: 18),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Menipis / habis',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            color: _textDark,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Perlu restok',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: _outline,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Text(
+                                    '$_totalMenipisCount',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: _warningColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (_hanyaMenipis)
+                                Positioned(
+                                  bottom: 0,
+                                  left: 6,
+                                  right: 6,
+                                  child: Container(
+                                    height: 2.5,
+                                    decoration: BoxDecoration(
+                                      color: _warningColor,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
+          ),
+
+          // ================= 3. INFO SUB-BAR =================
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: _primary,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Menampilkan $_total produk',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: _outline,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const Text(
+                  'Urutan: Terbaru',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: _outline,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ================= 4. LIST STOK PRODUK =================
           Expanded(child: _isi()),
         ],
       ),
@@ -205,118 +534,319 @@ class _StokListScreenState extends State<StokListScreen> {
 
   Widget _isi() {
     if (_memuat && _items.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: CircularProgressIndicator(color: _primary));
     }
     if (_error != null && _items.isEmpty) {
-      return _Pesan(
-        ikon: Icons.cloud_off_outlined,
-        teks: _error!,
-        aksi: FilledButton.tonal(
-            onPressed: _muatAwal, child: const Text('Coba lagi')),
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.cloud_off_rounded, size: 48, color: _outline),
+              const SizedBox(height: 12),
+              Text(_error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: _textMuted)),
+              const SizedBox(height: 16),
+              FilledButton.tonal(
+                  onPressed: _muatAwal, child: const Text('Coba lagi')),
+            ],
+          ),
+        ),
       );
     }
     if (_items.isEmpty) {
       return RefreshIndicator(
         onRefresh: _muatAwal,
+        color: _primary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
-            const SizedBox(height: 120),
-            _Pesan(
-              ikon: Icons.inventory_2_outlined,
-              teks: _hanyaMenipis
-                  ? 'Tidak ada produk dengan stok menipis.'
-                  : 'Belum ada produk. Tambahkan produk lebih dulu.',
+            const SizedBox(height: 80),
+            Center(
+              child: Column(
+                children: [
+                  Icon(Icons.inventory_2_outlined,
+                      size: 52, color: const Color(0xFFCBD5E1)),
+                  const SizedBox(height: 12),
+                  Text(
+                    _hanyaMenipis
+                        ? 'Tidak ada produk dengan stok menipis.'
+                        : 'Belum ada produk. Tambahkan produk lebih dulu.',
+                    style: const TextStyle(
+                        color: _textMuted, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       );
     }
 
-    final tema = Theme.of(context);
-
     return RefreshIndicator(
       onRefresh: _muatAwal,
-      child: ListView.builder(
+      color: _primary,
+      child: ListView.separated(
         controller: _scroll,
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        itemCount: _items.length + (_adaLagi ? 1 : 0),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+        itemCount: _items.length + (_adaLagi ? 1 : 0) + 1, // +1 untuk tip banner
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemBuilder: (context, i) {
+          // Tip Banner di item paling akhir
+          if (i == _items.length + (_adaLagi ? 1 : 0)) {
+            return Container(
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF4FF),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _primary.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.info_outline_rounded,
+                        color: _primary, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Ketuk kartu mana saja untuk mencatat penerimaan kontainer atau koreksi opname harian.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: _textDark,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }
+
           if (i >= _items.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
-              child: Center(child: CircularProgressIndicator()),
+              child: Center(
+                  child: CircularProgressIndicator(strokeWidth: 2.5)),
             );
           }
+
           final s = _items[i];
-
-          String? status;
-          Color? warna;
-          if (s.habis) {
-            status = 'Habis';
-            warna = tema.colorScheme.error;
-          } else if (s.menipis) {
-            status = 'Menipis (min ${formatAngka(s.stokMinimum)})';
-            warna = Colors.orange.shade800;
-          }
-
-          return Card(
-            child: ListTile(
-              onTap: () => _buka(s),
-              leading: const CircleAvatar(
-                  child: Icon(Icons.inventory_2_outlined)),
-              title: Text(s.nama,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(s.aktif ? s.kode : '${s.kode} • nonaktif'),
-                  if (status != null)
-                    Text(status,
-                        style: TextStyle(
-                            color: warna, fontWeight: FontWeight.w600)),
-                ],
-              ),
-              trailing: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(formatAngka(s.jumlah),
-                      style: tema.textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold)),
-                  Text(s.satuan, style: tema.textTheme.bodySmall),
-                ],
-              ),
-            ),
-          );
+          return _buildStokCard(s);
         },
       ),
     );
   }
-}
 
-class _Pesan extends StatelessWidget {
-  const _Pesan({required this.ikon, required this.teks, this.aksi});
+  // --- KARTU STOK PRODUK SESUAI TEMPLATE HTML ---
+  Widget _buildStokCard(StokProduk s) {
+    Color iconBg = const Color(0xFFD3E4FE);
+    Color iconColor = _primary;
+    Color countColor = _textDark;
+    Color pillBg = const Color(0xFFDCE9FF);
+    Color pillText = const Color(0xFF004AC6);
+    String statusLabel = 'Aman';
+    double progressRatio = 1.0;
+    Color progressBarColor = _primary;
 
-  final IconData ikon;
-  final String teks;
-  final Widget? aksi;
+    if (s.habis) {
+      iconBg = _errorBg;
+      iconColor = _errorColor;
+      countColor = _errorColor;
+      pillBg = _errorBg;
+      pillText = const Color(0xFF93000A);
+      statusLabel = 'Habis';
+      progressRatio = 0.0;
+      progressBarColor = _errorColor;
+    } else if (s.menipis) {
+      iconBg = _warningBg;
+      iconColor = _warningColor;
+      countColor = _warningColor;
+      pillBg = _warningBg;
+      pillText = const Color(0xFF783200);
+      statusLabel = 'Menipis';
+      progressRatio = 0.4;
+      progressBarColor = _warningBar;
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(ikon, size: 48, color: Theme.of(context).disabledColor),
-            const SizedBox(height: 12),
-            Text(teks, textAlign: TextAlign.center),
-            if (aksi != null) ...[const SizedBox(height: 16), aksi!],
-          ],
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: () => _buka(s),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top Row
+                Row(
+                  children: [
+                    // Icon Box
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: iconBg,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(Icons.inventory_2_rounded,
+                          color: iconColor, size: 24),
+                    ),
+                    const SizedBox(width: 14),
+
+                    // Title & SKU
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.nama,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: _textDark,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'SKU: ${s.kode}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: _outline,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Stock Count & Unit + Chevron
+                    Row(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              formatAngka(s.jumlah),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: countColor,
+                              ),
+                            ),
+                            Text(
+                              s.satuan,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: _outline,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.chevron_right_rounded,
+                            size: 20, color: Color(0xFFC3C6D7)),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // Middle Row: Stock Level Progress Bar
+                Container(
+                  width: double.infinity,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5EEFF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: FractionallySizedBox(
+                    alignment: Alignment.centerLeft,
+                    widthFactor: progressRatio,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: progressBarColor,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Bottom Row: Meta Info & Status Pill
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          s.habis
+                              ? Icons.cancel_outlined
+                              : (s.menipis
+                                  ? Icons.warning_amber_rounded
+                                  : Icons.info_outline_rounded),
+                          size: 15,
+                          color: s.habis
+                              ? _errorColor
+                              : (s.menipis ? _warningColor : _outline),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Minimum ${formatAngka(s.stokMinimum)} ${s.satuan}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: s.habis || s.menipis
+                                ? FontWeight.w600
+                                : FontWeight.normal,
+                            color: s.habis
+                                ? _errorColor
+                                : (s.menipis ? _warningColor : _outline),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: pillBg,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: pillText,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
