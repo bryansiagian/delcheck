@@ -5,6 +5,7 @@
 ///  - HP fisik (satu WiFi): http://IP-LAPTOP:8000/api  (jalankan: php artisan serve --host=0.0.0.0)
 ///  - Server (EC2/domain): https://domain-anda.com/api
 class AppConfig {
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  // static const String baseUrl = 'http://172.27.80.180:8000/api';
+  static const String baseUrl = 'http://192.168.43.188:8000/api';
   static const Duration timeout = Duration(seconds: 20);
 }
