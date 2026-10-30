@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/catat_pengiriman_bottom_sheet.dart';
 import '../core/api_client.dart';
 import '../core/format.dart';
 import '../models/pesanan.dart';
@@ -153,14 +154,17 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
   }
 
   Future<void> _kirim(Pesanan p) async {
-    final data = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (_) => const _KirimDialog(),
-    );
-    if (data == null || !mounted) return;
-    await _jalankan(
-        () => _service.kirim(p.id, data), 'Pesanan dalam perjalanan. Stok diperbarui.');
-  }
+      await CatatPengirimanBottomSheet.show(
+        context: context,
+        pesanan: p,
+        onSubmit: (data) async {
+          await _jalankan(
+            () => _service.kirim(p.id, data),
+            'Pengiriman berhasil dicatat dan diserahkan ke kurir.',
+          );
+        },
+      );
+    }
 
   Widget? _aksiBar(Pesanan p) {
     final user = context.read<AuthProvider>().user;

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../widgets/catat_pengiriman_bottom_sheet.dart';
 import '../core/api_client.dart';
 import '../core/format.dart';
 import '../models/pesanan.dart';
@@ -674,13 +675,28 @@ class _PesananListScreenState extends State<PesananListScreen> {
           _buildProgressTracker(stepActive, statusColor),
           const SizedBox(height: 14),
 
-          // 5. Tombol Aksi Sesuai Status
+// 5. Tombol Aksi Sesuai Status
           if (stepActive == 1) ...[
             SizedBox(
               width: double.infinity,
               height: 46,
               child: ElevatedButton.icon(
-                onPressed: () => _buka(p),
+                onPressed: () {
+                  CatatPengirimanBottomSheet.show(
+                    context: context,
+                    pesanan: p,
+                    onSubmit: (data) async {
+                      await _service.kirim(p.id, data);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                              content: Text('Pengiriman berhasil dicatat!')),
+                        );
+                        _muatAwal(); // segarkan daftar otomatis
+                      }
+                    },
+                  );
+                },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _primary,
                   foregroundColor: Colors.white,
