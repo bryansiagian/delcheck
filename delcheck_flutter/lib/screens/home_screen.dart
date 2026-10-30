@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../providers/auth_provider.dart';
+import 'admin_pengguna_screen.dart';
 import 'admin_verifikasi_screen.dart';
 import 'buat_pesanan_screen.dart';
 import 'pesanan_list_screen.dart';
@@ -151,13 +152,20 @@ class HomeScreen extends StatelessWidget {
             ),
 
           // ---- Admin
-          if (admin)
+          if (admin) ...[
             _MenuTile(
               ikon: Icons.verified_user_outlined,
               judul: 'Verifikasi Pendaftaran Retail',
               subjudul: 'Setujui atau tolak toko yang mendaftar',
               onTap: () => _buka(context, const AdminVerifikasiScreen()),
             ),
+            _MenuTile(
+              ikon: Icons.manage_accounts_outlined,
+              judul: 'Kelola Pengguna',
+              subjudul: 'Aktifkan atau nonaktifkan akun pengguna',
+              onTap: () => _buka(context, const AdminPenggunaScreen()),
+            ),
+          ],
 
           // ---- Admin dan Warehouse
           if (admin || warehouse) ...[
