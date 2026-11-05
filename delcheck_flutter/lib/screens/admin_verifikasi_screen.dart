@@ -5,10 +5,11 @@ import 'package:provider/provider.dart';
 
 import '../core/api_client.dart';
 import '../models/retailer_pendaftar.dart';
+import '../providers/auth_provider.dart';
 import '../services/admin_service.dart';
 import 'admin_detail_retailer_screen.dart';
 
-/// Daftar pendaftaran toko untuk diverifikasi admin.
+/// Daftar pendaftaran toko untuk diverifikasi Sales.
 class AdminVerifikasiScreen extends StatefulWidget {
   const AdminVerifikasiScreen({super.key});
 
@@ -20,10 +21,10 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
   static const _primary = Color(0xFF2563EB);
   static const _headerStart = Color(0xFF1D4ED8);
   static const _headerEnd = Color(0xFF3B82F6);
-  static const _background = Color(0xFFF1F5F9);
-  static const _textPrimary = Color(0xFF0F172A);
-  static const _textSecondary = Color(0xFF64748B);
-  static const _border = Color(0xFFE2E8F0);
+  static const _background = Color(0xFFF8F9FF);
+  static const _textPrimary = Color(0xFF0B1C30);
+  static const _textSecondary = Color(0xFF4D556B);
+  static const _outline = Color(0xFF737686);
 
   static const _statusList = {
     'menunggu': 'Menunggu',
@@ -32,6 +33,7 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
   };
 
   late final AdminService _service;
+  late final bool _authorized;
   final _scroll = ScrollController();
   final _cariCtrl = TextEditingController();
   Timer? _debounce;
@@ -54,8 +56,11 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
   void initState() {
     super.initState();
     _service = AdminService(context.read<ApiClient>());
+    final user = context.read<AuthProvider>().user;
+    _authorized =
+        user?.punyaPeran('sales') == true && user?.punyaPeran('admin') != true;
     _scroll.addListener(_onScroll);
-    _muatAwal();
+    if (_authorized) _muatAwal();
   }
 
   @override
@@ -156,15 +161,21 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!_authorized) {
+      return Scaffold(
+        backgroundColor: _background,
+        appBar: AppBar(title: const Text('Akses dibatasi')),
+        body: const Center(
+          child: Text('Halaman ini hanya dapat diakses oleh Sales.'),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: _background,
       body: Column(
         children: [
           _header(context),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-            child: _kolomPencarian(),
-          ),
           _filterStatus(),
           if (!_memuat && _error == null) _ringkasanJumlah(),
           Expanded(child: _isi()),
@@ -176,87 +187,101 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
   Widget _header(BuildContext context) => Container(
     width: double.infinity,
     padding: EdgeInsets.fromLTRB(
-      20,
-      MediaQuery.paddingOf(context).top + 10,
-      20,
-      28,
+      16,
+      MediaQuery.paddingOf(context).top + 20,
+      16,
+      36,
     ),
-    decoration: const BoxDecoration(
+    decoration: BoxDecoration(
       gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
         colors: [_headerStart, _headerEnd],
       ),
-      borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x291D4ED8),
+          blurRadius: 16,
+          offset: Offset(0, 4),
+        ),
+      ],
     ),
-    child: Stack(
-      clipBehavior: Clip.none,
+    child: Column(
       children: [
-        Positioned(
-          top: -64,
-          right: -42,
-          child: Container(
-            width: 150,
-            height: 150,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
-        Positioned(
-          top: 26,
-          left: 70,
-          child: Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
         Row(
           children: [
-            Material(
-              color: Colors.white.withValues(alpha: 0.18),
-              shape: const CircleBorder(),
-              child: IconButton(
-                tooltip: 'Kembali',
-                onPressed: () => Navigator.maybePop(context),
-                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            InkWell(
+              onTap: () => Navigator.maybePop(context),
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_back,
+                  color: Colors.white,
+                  size: 22,
+                ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             const Expanded(
-              child: Text(
-                'Verifikasi Pendaftaran',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Verifikasi Pendaftaran',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Tinjau pendaftaran toko retail',
+                    style: TextStyle(color: Color(0xFFDBEAFE), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.fact_check_rounded,
+                color: Colors.white,
+                size: 20,
               ),
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        _kolomPencarian(),
       ],
     ),
   );
 
   Widget _kolomPencarian() => Container(
+    height: 50,
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
       boxShadow: [
         BoxShadow(
-          color: _textPrimary.withValues(alpha: 0.035),
-          blurRadius: 14,
-          offset: const Offset(0, 4),
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
         ),
       ],
     ),
@@ -266,46 +291,56 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
       textInputAction: TextInputAction.search,
       decoration: InputDecoration(
         hintText: 'Cari nama toko, kode, pemilik, telepon',
-        hintStyle: const TextStyle(color: _textSecondary, fontSize: 14),
-        prefixIcon: const Icon(Icons.search_rounded, color: _textSecondary),
+        hintStyle: const TextStyle(color: _outline, fontSize: 13),
+        prefixIcon: const Icon(Icons.search, color: _outline, size: 22),
         suffixIcon: _cariCtrl.text.isEmpty
             ? null
             : IconButton(
                 tooltip: 'Hapus pencarian',
-                icon: const Icon(Icons.close_rounded),
+                icon: const Icon(Icons.clear, size: 20),
                 onPressed: () {
                   _cariCtrl.clear();
                   _onCari('');
                   setState(() {});
                 },
               ),
-        contentPadding: const EdgeInsets.symmetric(vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: _primary, width: 1.5),
-        ),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        border: InputBorder.none,
       ),
     ),
   );
 
-  Widget _filterStatus() => SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    padding: const EdgeInsets.symmetric(horizontal: 20),
-    child: Row(
-      children: [
-        for (final entry in _statusList.entries) ...[
-          _filterChip(entry.key, entry.value),
-          if (entry.key != _statusList.keys.last) const SizedBox(width: 8),
-        ],
-      ],
+  Widget _filterStatus() => Transform.translate(
+    offset: const Offset(0, -22),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F172A).withValues(alpha: 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            for (final entry in _statusList.entries)
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    right: entry.key == _statusList.keys.last ? 0 : 4,
+                  ),
+                  child: _filterChip(entry.key, entry.value),
+                ),
+              ),
+          ],
+        ),
+      ),
     ),
   );
 
@@ -317,33 +352,28 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
       _ => Icons.cancel_outlined,
     };
     return Material(
-      color: selected ? _primary : Colors.white,
-      borderRadius: BorderRadius.circular(14),
+      color: selected ? const Color(0xFFE5EEFF) : Colors.transparent,
+      borderRadius: BorderRadius.circular(18),
       child: InkWell(
         onTap: () => _gantiStatus(status),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(18),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 44),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: selected ? _primary : _border),
-          ),
-          child: Row(
+          constraints: const BoxConstraints(minHeight: 52),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(18)),
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                icon,
-                size: 17,
-                color: selected ? Colors.white : _textSecondary,
-              ),
-              const SizedBox(width: 7),
+              Icon(icon, size: 18, color: selected ? _primary : _outline),
+              const SizedBox(height: 3),
               Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: selected ? Colors.white : _textSecondary,
-                  fontSize: 13,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  color: selected ? _primary : _textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
@@ -353,36 +383,51 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
     );
   }
 
-  Widget _ringkasanJumlah() => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
-    child: Row(
-      children: [
-        const Expanded(
-          child: Text(
-            'Total Pendaftaran',
-            style: TextStyle(
-              color: _textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
+  Widget _ringkasanJumlah() => Transform.translate(
+    offset: const Offset(0, -22),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: _primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Menampilkan $_total pendaftaran',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: _outline,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFFDBEAFE),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            '$_total pendaftaran',
+          const SizedBox(width: 8),
+          Text(
+            'Status: ${_statusList[_status]}',
+            maxLines: 1,
             style: const TextStyle(
-              color: _primary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: _outline,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 
@@ -484,20 +529,19 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
 
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(24),
       child: InkWell(
         onTap: () => _buka(retailer),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: _border.withValues(alpha: 0.8)),
+            borderRadius: BorderRadius.circular(24),
             boxShadow: [
               BoxShadow(
-                color: _textPrimary.withValues(alpha: 0.035),
-                blurRadius: 16,
-                offset: const Offset(0, 5),
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
@@ -509,7 +553,7 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
                 height: 52,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFDBEAFE),
+                  color: const Color(0xFFD3E4FE),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
@@ -538,25 +582,32 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
                       ),
                     ),
                     const SizedBox(height: 7),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        retailer.kode,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: _textSecondary,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                    Wrap(
+                      spacing: 7,
+                      runSpacing: 6,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE5EEFF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            retailer.kode,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _textSecondary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
-                      ),
+                        _badgeStatus(retailer),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     _metadataToko(
@@ -579,12 +630,43 @@ class _AdminVerifikasiScreenState extends State<AdminVerifikasiScreen> {
                 padding: EdgeInsets.only(top: 14),
                 child: Icon(
                   Icons.chevron_right_rounded,
-                  color: Color(0xFF94A3B8),
+                  color: Color(0xFFC3C6D7),
                   size: 24,
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _badgeStatus(RetailerPendaftar retailer) {
+    final (background, foreground, label) = switch (retailer.status) {
+      'disetujui' => (
+        const Color(0xFFCCFBF1),
+        const Color(0xFF0D9488),
+        'Disetujui',
+      ),
+      'ditolak' => (
+        const Color(0xFFFFDAD6),
+        const Color(0xFFBA1A1A),
+        'Ditolak',
+      ),
+      _ => (const Color(0xFFFFDBCA), const Color(0xFF9D4300), 'Menunggu'),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: foreground,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
         ),
       ),
     );
@@ -635,7 +717,7 @@ class _Pesan extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(ikon, size: 48, color: Theme.of(context).disabledColor),
+            Icon(ikon, size: 48, color: const Color(0xFFCBD5E1)),
             const SizedBox(height: 14),
             Text(
               judul,

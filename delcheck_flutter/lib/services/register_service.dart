@@ -44,15 +44,15 @@ class RegisterPayload {
   /// Field kosong tidak dikirim, supaya aturan `nullable` /
   /// `required_without` di server bekerja benar.
   Map<String, dynamic> toJson() => {
-        'name': name,
-        if (email != null) 'email': email,
-        if (phone != null) 'phone': phone,
-        'password': password,
-        'nama_toko': namaToko,
-        if (namaPemilik != null) 'nama_pemilik': namaPemilik,
-        'alamat': alamat,
-        if (wilayahId != null) 'wilayah_id': wilayahId,
-      };
+    'name': name,
+    if (email != null) 'email': email,
+    if (phone != null) 'phone': phone,
+    'password': password,
+    'nama_toko': namaToko,
+    if (namaPemilik != null) 'nama_pemilik': namaPemilik,
+    'alamat': alamat,
+    if (wilayahId != null) 'wilayah_id': wilayahId,
+  };
 }
 
 class RegisterService {
@@ -61,24 +61,29 @@ class RegisterService {
   final http.Client _client;
 
   RegisterService({String? baseUrl, http.Client? client})
-      : baseUrl = baseUrl ?? AppConfig.baseUrl,
-        _client = client ?? http.Client();
+    : baseUrl = baseUrl ?? AppConfig.baseUrl,
+      _client = client ?? http.Client();
 
   static const _headers = {
-    'Accept': 'application/json', // wajib, agar Laravel membalas 422 sebagai JSON
+    'Accept':
+        'application/json', // wajib, agar Laravel membalas 422 sebagai JSON
     'Content-Type': 'application/json',
   };
 
   /// GET {baseUrl}/wilayah?tingkat=...&parent_id=...
   Future<List<Wilayah>> fetchWilayah({String? tingkat, int? parentId}) async {
-    final uri = Uri.parse('$baseUrl/wilayah').replace(queryParameters: {
-      if (tingkat != null) 'tingkat': tingkat,
-      if (parentId != null) 'parent_id': '$parentId',
-    });
+    final uri = Uri.parse('$baseUrl/wilayah').replace(
+      queryParameters: {
+        if (tingkat != null) 'tingkat': tingkat,
+        if (parentId != null) 'parent_id': '$parentId',
+      },
+    );
     final res = await _send(() => _client.get(uri, headers: _headers));
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     if (res.statusCode != 200) {
-      throw RegisterException(body['message']?.toString() ?? 'Gagal memuat wilayah.');
+      throw RegisterException(
+        body['message']?.toString() ?? 'Gagal memuat wilayah.',
+      );
     }
     return (body['data'] as List)
         .map((e) => Wilayah.fromJson(e as Map<String, dynamic>))
@@ -89,19 +94,31 @@ class RegisterService {
   Future<String> register(RegisterPayload payload) async {
     final uri = Uri.parse('$baseUrl/auth/register');
     final res = await _send(
-      () => _client.post(uri, headers: _headers, body: jsonEncode(payload.toJson())),
+      () => _client.post(
+        uri,
+        headers: _headers,
+        body: jsonEncode(payload.toJson()),
+      ),
     );
 
     Map<String, dynamic> body;
     try {
       body = jsonDecode(res.body) as Map<String, dynamic>;
     } catch (_) {
-      throw RegisterException('Respons server tidak valid (${res.statusCode}).');
+      throw RegisterException(
+        'Respons server tidak valid (${res.statusCode}).',
+      );
     }
 
     if (res.statusCode == 201 || res.statusCode == 200) {
-      return body['message']?.toString() ??
-          'Pendaftaran berhasil. Akun Anda menunggu verifikasi Admin.';
+      final message = body['message']?.toString();
+      if (message == null || message.isEmpty) {
+        return 'Pendaftaran berhasil. Akun Anda menunggu proses verifikasi.';
+      }
+      return message.replaceAll(
+        RegExp('verifikasi admin', caseSensitive: false),
+        'proses verifikasi',
+      );
     }
 
     if (res.statusCode == 422) {
@@ -122,14 +139,18 @@ class RegisterService {
       );
     }
 
-    throw RegisterException(body['message']?.toString() ?? 'Terjadi kesalahan (${res.statusCode}).');
+    throw RegisterException(
+      body['message']?.toString() ?? 'Terjadi kesalahan (${res.statusCode}).',
+    );
   }
 
   Future<http.Response> _send(Future<http.Response> Function() request) async {
     try {
       return await request().timeout(AppConfig.timeout);
     } catch (_) {
-      throw RegisterException('Tidak dapat terhubung ke server. Periksa koneksi internet Anda.');
+      throw RegisterException(
+        'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.',
+      );
     }
   }
 }

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
@@ -38,6 +39,11 @@ class Produk extends Model
     public function stok(): HasOne
     {
         return $this->hasOne(StokProduk::class, 'produk_id');
+    }
+
+    public function itemRetur(): HasMany
+    {
+        return $this->hasMany(ItemRetur::class, 'produk_id');
     }
 
     /**

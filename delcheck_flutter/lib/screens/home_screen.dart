@@ -10,6 +10,7 @@ import 'admin_verifikasi_screen.dart';
 import 'buat_pesanan_screen.dart';
 import 'pesanan_list_screen.dart';
 import 'produk_list_screen.dart';
+import 'retur_list_screen.dart';
 import 'stok_list_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -48,6 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final api = context.read<ApiClient>();
     final user = context.read<AuthProvider>().user;
     final isAdmin = user?.punyaPeran('admin') ?? false;
+    final isSales = user?.punyaPeran('sales') ?? false;
     final isWarehouse = user?.punyaPeran('warehouse') ?? false;
 
     int menunggu = 0;
@@ -56,8 +58,8 @@ class _HomeScreenState extends State<HomeScreen> {
     List<RetailerPendaftar> pendaftar = [];
 
     try {
-      // 1. Ambil data Retailer Menunggu Verifikasi (Khusus Admin)
-      if (isAdmin) {
+      // Hanya Sales yang dapat melihat ringkasan pendaftaran menunggu.
+      if (isSales) {
         try {
           final adminService = AdminService(api);
           final resRetail = await adminService.daftar(status: 'menunggu');
@@ -70,7 +72,9 @@ class _HomeScreenState extends State<HomeScreen> {
       try {
         final resPesanan = await api.get('/pesanan?status=dikonfirmasi');
         final data = resPesanan['data'];
-        if (data is Map && data['meta'] != null && data['meta']['total'] != null) {
+        if (data is Map &&
+            data['meta'] != null &&
+            data['meta']['total'] != null) {
           perluKirim = int.tryParse('${data['meta']['total']}') ?? 0;
         } else if (data is List) {
           perluKirim = data.length;
@@ -91,8 +95,11 @@ class _HomeScreenState extends State<HomeScreen> {
           // Hitung barang yang stoknya <= 10 atau field stok_menipis
           stokMenipis = listStok.where((item) {
             if (item is Map) {
-              final stok = int.tryParse('${item['stok'] ?? item['jumlah'] ?? 999}') ?? 999;
-              final minimal = int.tryParse('${item['stok_minimum'] ?? 10}') ?? 10;
+              final stok =
+                  int.tryParse('${item['stok'] ?? item['jumlah'] ?? 999}') ??
+                  999;
+              final minimal =
+                  int.tryParse('${item['stok_minimum'] ?? 10}') ?? 10;
               return stok <= minimal;
             }
             return false;
@@ -117,8 +124,10 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Keluar Akun',
-            style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Keluar Akun',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         content: const Text('Apakah Anda yakin ingin keluar dari sesi ini?'),
         actions: [
           TextButton(
@@ -129,7 +138,8 @@ class _HomeScreenState extends State<HomeScreen> {
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFFEF4444),
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
+                borderRadius: BorderRadius.circular(12),
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Keluar'),
@@ -155,9 +165,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final initial = namaUser.isNotEmpty ? namaUser[0].toUpperCase() : 'A';
     final roleName = user?.peranUtama.toUpperCase() ?? 'ADMIN SISTEM';
 
-    final admin = user?.punyaPeran('admin') ?? true;
+    final admin = user?.punyaPeran('admin') ?? false;
     final warehouse = user?.punyaPeran('warehouse') ?? false;
     final retail = user?.punyaPeran('retail') ?? false;
+    final sales = user?.punyaPeran('sales') ?? false;
+    final returDiizinkan = admin || warehouse || retail || sales;
 
     return Scaffold(
       backgroundColor: _bgScreen,
@@ -202,7 +214,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(10),
                                 border: Border.all(
-                                    color: Colors.white.withOpacity(0.2)),
+                                  color: Colors.white.withOpacity(0.2),
+                                ),
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(6),
@@ -210,8 +223,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   'assets/images/logo.png',
                                   fit: BoxFit.contain,
                                   errorBuilder: (_, __, ___) => const Icon(
-                                      Icons.check_circle,
-                                      color: _bluePrimary),
+                                    Icons.check_circle,
+                                    color: _bluePrimary,
+                                  ),
                                 ),
                               ),
                             ),
@@ -252,10 +266,14 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: Colors.white.withOpacity(0.18),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                  color: Colors.white.withOpacity(0.25)),
+                                color: Colors.white.withOpacity(0.25),
+                              ),
                             ),
-                            child: const Icon(Icons.logout_rounded,
-                                color: Colors.white, size: 20),
+                            child: const Icon(
+                              Icons.logout_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                           ),
                         ),
                       ],
@@ -276,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: Colors.black.withOpacity(0.1),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
-                              )
+                              ),
                             ],
                           ),
                           alignment: Alignment.center,
@@ -317,15 +335,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 2),
+                                      horizontal: 8,
+                                      vertical: 2,
+                                    ),
                                     decoration: BoxDecoration(
                                       color: Colors.white.withOpacity(0.22),
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.verified_user_rounded,
-                                            size: 11, color: Color(0xFFFDBA74)),
+                                        const Icon(
+                                          Icons.verified_user_rounded,
+                                          size: 11,
+                                          color: Color(0xFFFDBA74),
+                                        ),
                                         const SizedBox(width: 4),
                                         Text(
                                           roleName,
@@ -342,7 +365,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Text(
                                     '• Sesi Aktif',
                                     style: TextStyle(
-                                      color: Colors.blue.shade100.withOpacity(0.8),
+                                      color: Colors.blue.shade100.withOpacity(
+                                        0.8,
+                                      ),
                                       fontSize: 10,
                                     ),
                                   ),
@@ -377,14 +402,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Row(
                       children: [
-                        _buildSummaryItem(
-                          icon: Icons.how_to_reg_rounded,
-                          iconColor: const Color(0xFFF97316),
-                          bgColor: const Color(0xFFFFEDD5),
-                          count: _memuatData ? '...' : '$_totalMenunggu',
-                          label: 'Menunggu\nverifikasi',
-                        ),
-                        Container(width: 1, height: 38, color: const Color(0xFFF1F5F9)),
+                        if (sales) ...[
+                          _buildSummaryItem(
+                            icon: Icons.how_to_reg_rounded,
+                            iconColor: const Color(0xFFF97316),
+                            bgColor: const Color(0xFFFFEDD5),
+                            count: _memuatData ? '...' : '$_totalMenunggu',
+                            label: 'Menunggu\nverifikasi',
+                          ),
+                          Container(
+                            width: 1,
+                            height: 38,
+                            color: const Color(0xFFF1F5F9),
+                          ),
+                        ],
                         _buildSummaryItem(
                           icon: Icons.local_shipping_rounded,
                           iconColor: _bluePrimary,
@@ -392,7 +423,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           count: _memuatData ? '...' : '$_totalPerluDikirim',
                           label: 'Perlu\ndikirim',
                         ),
-                        Container(width: 1, height: 38, color: const Color(0xFFF1F5F9)),
+                        Container(
+                          width: 1,
+                          height: 38,
+                          color: const Color(0xFFF1F5F9),
+                        ),
                         _buildSummaryItem(
                           icon: Icons.warning_amber_rounded,
                           iconColor: const Color(0xFF0D9488),
@@ -428,13 +463,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 3),
+                              horizontal: 10,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFEFF6FF),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Text(
-                              '5 Layanan',
+                              'Layanan',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
@@ -446,8 +483,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 12),
 
-                      // FEATURED CARD: Verifikasi Pendaftaran Retail
-                      if (admin)
+                      // Fitur verifikasi pendaftaran Retail khusus Sales.
+                      if (sales)
                         _buildFeaturedCard(
                           context: context,
                           totalMenunggu: _totalMenunggu,
@@ -477,8 +514,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                   _buka(context, const AdminPenggunaScreen()),
                             ),
 
-                          // Card 2: Pengiriman
-                          if (admin || warehouse)
+                          // Card 2: Pengiriman hanya untuk Admin.
+                          if (admin)
                             _buildGridCard(
                               icon: Icons.local_shipping_outlined,
                               iconColor: const Color(0xFF4F46E5),
@@ -491,11 +528,65 @@ class _HomeScreenState extends State<HomeScreen> {
                                   judul: 'Pengiriman',
                                   tampilkanToko: true,
                                   filter: [
-                                    PesananFilter('Semua', null, icon: Icons.layers_rounded),
-                                    PesananFilter('Siap dikirim', 'dikonfirmasi', icon: Icons.inventory_2_rounded),
-                                    PesananFilter('Bersama kurir', 'diproses', icon: Icons.person_pin_circle_rounded),
-                                    PesananFilter('Dalam perjalanan', 'dikirim', icon: Icons.local_shipping_rounded),
-                                    PesananFilter('Diterima', 'diterima,selesai', icon: Icons.check_circle_rounded),
+                                    PesananFilter(
+                                      'Semua',
+                                      null,
+                                      icon: Icons.layers_rounded,
+                                    ),
+                                    PesananFilter(
+                                      'Siap dikirim',
+                                      'dikonfirmasi',
+                                      icon: Icons.inventory_2_rounded,
+                                    ),
+                                    PesananFilter(
+                                      'Kurir',
+                                      'diproses',
+                                      icon: Icons.person_pin_circle_rounded,
+                                    ),
+                                    PesananFilter(
+                                      'Jalan',
+                                      'dikirim',
+                                      icon: Icons.local_shipping_rounded,
+                                    ),
+                                    PesananFilter(
+                                      'Diterima',
+                                      'diterima,selesai',
+                                      icon: Icons.check_circle_rounded,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                          // Warehouse tetap dapat membaca daftar pesanan.
+                          if (warehouse)
+                            _buildGridCard(
+                              icon: Icons.receipt_long_outlined,
+                              iconColor: const Color(0xFF0D9488),
+                              iconBg: const Color(0xFFCCFBF1),
+                              title: 'Daftar Pesanan',
+                              desc: 'Lihat kebutuhan stok dari pesanan',
+                              onTap: () => _buka(
+                                context,
+                                const PesananListScreen(
+                                  judul: 'Daftar Pesanan',
+                                  tampilanWarehouse: true,
+                                  filter: [
+                                    PesananFilter('Semua', null),
+                                    PesananFilter(
+                                      'Menunggu konfirmasi',
+                                      'menunggu_konfirmasi_sales',
+                                    ),
+                                    PesananFilter(
+                                      'Dikonfirmasi',
+                                      'dikonfirmasi',
+                                    ),
+                                    PesananFilter('Diproses', 'diproses'),
+                                    PesananFilter('Dikirim', 'dikirim'),
+                                    PesananFilter(
+                                      'Selesai',
+                                      'diterima,selesai',
+                                    ),
                                   ],
                                 ),
                               ),
@@ -536,6 +627,72 @@ class _HomeScreenState extends State<HomeScreen> {
                               onTap: () =>
                                   _buka(context, const BuatPesananScreen()),
                             ),
+
+                          // Daftar aktif dan riwayat transaksi milik Retail.
+                          if (retail)
+                            _buildGridCard(
+                              icon: Icons.receipt_long_rounded,
+                              iconColor: const Color(0xFF0D9488),
+                              iconBg: const Color(0xFFCCFBF1),
+                              title: 'Pesanan Saya',
+                              desc: 'Pesanan aktif dan riwayat transaksi',
+                              onTap: () => _buka(
+                                context,
+                                const PesananListScreen(
+                                  judul: 'Pesanan Saya',
+                                  tampilanRetail: true,
+                                  filter: [
+                                    PesananFilter(
+                                      'Pesanan Aktif',
+                                      'menunggu_konfirmasi_sales,dikonfirmasi,diproses,dikirim',
+                                      icon: Icons.pending_actions_rounded,
+                                    ),
+                                    PesananFilter(
+                                      'Riwayat Pesanan',
+                                      'diterima,ditolak,dibatalkan',
+                                      icon: Icons.history_rounded,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                          // Antrian keputusan pesanan khusus Sales.
+                          if (sales)
+                            _buildGridCard(
+                              icon: Icons.fact_check_outlined,
+                              iconColor: const Color(0xFFEA580C),
+                              iconBg: const Color(0xFFFFEDD5),
+                              title: 'Konfirmasi Pesanan',
+                              desc: 'Tinjau pesanan yang menunggu keputusan',
+                              onTap: () => _buka(
+                                context,
+                                const PesananListScreen(
+                                  judul: 'Konfirmasi Pesanan',
+                                  tampilanSales: true,
+                                  filter: [
+                                    PesananFilter(
+                                      'Menunggu',
+                                      'menunggu_konfirmasi_sales',
+                                      icon: Icons.hourglass_top_rounded,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                          // Daftar Return untuk setiap role yang didukung.
+                          // Cakupan data dan otorisasi tetap ditentukan backend.
+                          if (returDiizinkan)
+                            _buildGridCard(
+                              icon: Icons.assignment_return_outlined,
+                              iconColor: const Color(0xFF0D9488),
+                              iconBg: const Color(0xFFCCFBF1),
+                              title: 'Return',
+                              desc: 'Lihat status pengembalian produk',
+                              onTap: () =>
+                                  _buka(context, const ReturListScreen()),
+                            ),
                         ],
                       ),
 
@@ -571,8 +728,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ),
                                 SizedBox(width: 2),
-                                Icon(Icons.refresh_rounded,
-                                    size: 16, color: _bluePrimary),
+                                Icon(
+                                  Icons.refresh_rounded,
+                                  size: 16,
+                                  color: _bluePrimary,
+                                ),
                               ],
                             ),
                           ),
@@ -607,22 +767,30 @@ class _HomeScreenState extends State<HomeScreen> {
                                 hasDot: true,
                               ),
                               const Divider(
-                                  height: 24, thickness: 1, color: Color(0xFFF1F5F9)),
+                                height: 24,
+                                thickness: 1,
+                                color: Color(0xFFF1F5F9),
+                              ),
                             ],
                             _buildActivityRow(
                               icon: Icons.local_shipping_rounded,
                               iconBg: const Color(0xFFDBEAFE),
                               iconColor: _bluePrimary,
-                              title: '$_totalPerluDikirim pesanan menunggu proses kirim',
+                              title:
+                                  '$_totalPerluDikirim pesanan menunggu proses kirim',
                               time: 'Status siap diproses',
                             ),
                             const Divider(
-                                height: 24, thickness: 1, color: Color(0xFFF1F5F9)),
+                              height: 24,
+                              thickness: 1,
+                              color: Color(0xFFF1F5F9),
+                            ),
                             _buildActivityRow(
                               icon: Icons.inventory_rounded,
                               iconBg: const Color(0xFFCCFBF1),
                               iconColor: const Color(0xFF0D9488),
-                              title: '$_totalStokMenipis produk dalam stok kritis',
+                              title:
+                                  '$_totalStokMenipis produk dalam stok kritis',
                               time: 'Periksa persediaan gudang',
                             ),
                           ],
@@ -736,8 +904,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ],
               ),
-              child: const Icon(Icons.verified_user_rounded,
-                  color: Colors.white, size: 24),
+              child: const Icon(
+                Icons.verified_user_rounded,
+                color: Colors.white,
+                size: 24,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -753,13 +924,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const Text(
-                    'Setujui atau tolak toko mendaftar',
+                    'Tinjau dan verifikasi pendaftaran Retail.',
                     style: TextStyle(fontSize: 11, color: _textMuted),
                   ),
                   const SizedBox(height: 6),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFFFFEDD5),
                       borderRadius: BorderRadius.circular(20),
@@ -768,7 +941,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         const CircleAvatar(
-                            radius: 3, backgroundColor: Color(0xFFF97316)),
+                          radius: 3,
+                          backgroundColor: Color(0xFFF97316),
+                        ),
                         const SizedBox(width: 5),
                         Text(
                           '$totalMenunggu menunggu',
@@ -791,8 +966,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Color(0xFFF8FAFC),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.chevron_right_rounded,
-                  color: Color(0xFF94A3B8), size: 20),
+              child: const Icon(
+                Icons.chevron_right_rounded,
+                color: Color(0xFF94A3B8),
+                size: 20,
+              ),
             ),
           ],
         ),
@@ -849,8 +1027,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Color(0xFFF8FAFC),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.arrow_outward_rounded,
-                      size: 14, color: Color(0xFF94A3B8)),
+                  child: const Icon(
+                    Icons.arrow_outward_rounded,
+                    size: 14,
+                    color: Color(0xFF94A3B8),
+                  ),
                 ),
               ],
             ),
@@ -925,10 +1106,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         if (hasDot)
-          const CircleAvatar(
-            radius: 3.5,
-            backgroundColor: Color(0xFFF97316),
-          ),
+          const CircleAvatar(radius: 3.5, backgroundColor: Color(0xFFF97316)),
       ],
     );
   }

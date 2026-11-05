@@ -22,6 +22,10 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Delcheck memerlukan akses ke galeri untuk memilih foto kondisi produk retur.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Delcheck memerlukan akses kamera untuk mengambil foto kondisi produk retur.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

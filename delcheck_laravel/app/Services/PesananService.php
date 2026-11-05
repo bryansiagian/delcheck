@@ -17,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Alur pesanan:
- *  Retail membuat -> Sales setujui/tolak -> Warehouse/Admin serahkan ke kurir
+ *  Retail membuat -> Sales setujui/tolak -> Admin proses dan atur pengiriman
  *  dan tandai dalam perjalanan -> Retail konfirmasi diterima.
  * Stok berkurang saat pesanan ditandai "dikirim" (BR-07).
  */
@@ -150,6 +150,7 @@ class PesananService
 
         return DB::transaction(function () use ($pesanan, $user) {
             $p = $this->kunci($pesanan, [StatusPesanan::Dikirim]);
+            $pengiriman = $this->kunciPengiriman($p, 'jalan');
             $sekarang = now();
 
             $p->update([
@@ -158,9 +159,10 @@ class PesananService
                 'diterima_at' => $sekarang,
             ]);
 
-            $p->pengiriman()->where('status', 'dikirim')->update([
+            $pengiriman->update([
                 'status' => 'diterima',
                 'diterima_at' => $sekarang,
+                'diperbarui_oleh' => $user->id,
             ]);
 
             AuditLog::catat(
@@ -169,7 +171,12 @@ class PesananService
                 StatusPesanan::Dikirim->value,
                 StatusPesanan::Diterima->value,
                 null,
-                [],
+                [
+                    'pesanan_id' => $p->id,
+                    'pengiriman_id' => $pengiriman->id,
+                    'status_pengiriman_dari' => 'jalan',
+                    'status_pengiriman_ke' => 'diterima',
+                ],
                 $user->id,
             );
 
@@ -234,53 +241,29 @@ class PesananService
         });
     }
 
-    // --------------------------------------------------- Warehouse / Admin
+    // -------------------------------------------------------------- Admin
 
-    /** Barang sudah diserahkan ke kurir. */
-    public function proses(Pesanan $pesanan, User $user): Pesanan
-    {
-        return DB::transaction(function () use ($pesanan, $user) {
-            $p = $this->kunci($pesanan, [StatusPesanan::Dikonfirmasi]);
-
-            $p->update([
-                'status' => StatusPesanan::Diproses,
-                'diproses_oleh' => $user->id,
-                'diproses_at' => now(),
-            ]);
-
-            AuditLog::catat(
-                $p,
-                'pesanan_diproses',
-                StatusPesanan::Dikonfirmasi->value,
-                StatusPesanan::Diproses->value,
-                null,
-                [],
-                $user->id,
-            );
-
-            return $p->load(self::MUAT);
-        });
-    }
-
-    /**
-     * Barang dalam perjalanan: mencatat pengiriman dan mengurangi stok.
-     * Boleh langsung dari "dikonfirmasi" (melewati "diserahkan ke kurir").
-     *
-     * @param  array{tanggal_kirim: string, estimasi_tiba?: ?string, nomor_surat_jalan?: ?string, catatan?: ?string}  $data
-     */
-    public function kirim(Pesanan $pesanan, array $data, User $user): Pesanan
+    /** Catat pengiriman, turunkan stok, dan pindahkan pesanan ke tahap Kurir. */
+    public function catatPengiriman(Pesanan $pesanan, array $data, User $user): Pesanan
     {
         return DB::transaction(function () use ($pesanan, $data, $user) {
-            $p = $this->kunci($pesanan, [StatusPesanan::Dikonfirmasi, StatusPesanan::Diproses]);
-            $dari = $p->status;
+            $p = $this->kunci($pesanan, [StatusPesanan::Dikonfirmasi]);
+
+            if ($p->pengiriman()->exists()) {
+                throw new ApiException(
+                    'Pengiriman untuk pesanan ini sudah dicatat.',
+                    409,
+                    'PENGIRIMAN_SUDAH_DICATAT',
+                );
+            }
 
             $items = $p->items()->orderBy('produk_id')->get();
-
-            // Kunci baris stok berurutan (hindari deadlock), lalu cek semua item sekaligus.
             $kurang = [];
             foreach ($items as $item) {
                 StokProduk::firstOrCreate(['produk_id' => $item->produk_id], ['jumlah' => 0]);
-                $tersedia = (int) StokProduk::where('produk_id', $item->produk_id)->lockForUpdate()->value('jumlah');
+                $tersedia = (int) StokProduk::where('produk_id', $item->produk_id)
+                    ->lockForUpdate()
+                    ->value('jumlah');
 
                 if ($tersedia < $item->qty) {
                     $kurang[] = "{$item->nama_produk} (butuh {$item->qty}, tersedia {$tersedia})";
@@ -306,31 +289,73 @@ class PesananService
             }
 
             $sekarang = now();
-
             $p->update([
-                'status' => StatusPesanan::Dikirim,
-                'dikirim_at' => $sekarang,
-                'diproses_oleh' => $p->diproses_oleh ?? $user->id,
-                'diproses_at' => $p->diproses_at ?? $sekarang,
+                'status' => StatusPesanan::Diproses,
+                'diproses_oleh' => $user->id,
+                'diproses_at' => $sekarang,
             ]);
 
-            Pengiriman::create([
+            $pengiriman = Pengiriman::create([
                 'pesanan_id' => $p->id,
-                'nomor_surat_jalan' => $data['nomor_surat_jalan'] ?? null,
-                'status' => 'dikirim',
+                'status' => 'kurir',
                 'tanggal_kirim' => $data['tanggal_kirim'],
                 'estimasi_tiba' => $data['estimasi_tiba'] ?? null,
+                'nomor_surat_jalan' => $data['nomor_surat_jalan'] ?? null,
+                'nama_pengemudi' => $data['nama_pengemudi'],
+                'telepon_pengemudi' => $data['telepon_pengemudi'],
+                'nomor_kendaraan' => $data['nomor_kendaraan'],
                 'catatan' => $data['catatan'] ?? null,
                 'diperbarui_oleh' => $user->id,
             ]);
 
             AuditLog::catat(
                 $p,
+                'pengiriman_dicatat',
+                StatusPesanan::Dikonfirmasi->value,
+                StatusPesanan::Diproses->value,
+                null,
+                [
+                    'pesanan_id' => $p->id,
+                    'pengiriman_id' => $pengiriman->id,
+                    'status_pengiriman_dari' => null,
+                    'status_pengiriman_ke' => 'kurir',
+                ],
+                $user->id,
+            );
+
+            return $p->load(self::MUAT);
+        });
+    }
+
+    /** Tandai pengiriman yang sudah dicatat sebagai berangkat tanpa menyentuh stok. */
+    public function tandaiJalan(Pesanan $pesanan, User $user): Pesanan
+    {
+        return DB::transaction(function () use ($pesanan, $user) {
+            $p = $this->kunci($pesanan, [StatusPesanan::Diproses]);
+            $pengiriman = $this->kunciPengiriman($p, 'kurir');
+            $sekarang = now();
+
+            $pengiriman->update([
+                'status' => 'jalan',
+                'diperbarui_oleh' => $user->id,
+            ]);
+            $p->update([
+                'status' => StatusPesanan::Dikirim,
+                'dikirim_at' => $sekarang,
+            ]);
+
+            AuditLog::catat(
+                $p,
                 'pesanan_dikirim',
-                $dari->value,
+                StatusPesanan::Diproses->value,
                 StatusPesanan::Dikirim->value,
                 null,
-                [],
+                [
+                    'pesanan_id' => $p->id,
+                    'pengiriman_id' => $pengiriman->id,
+                    'status_pengiriman_dari' => 'kurir',
+                    'status_pengiriman_ke' => 'jalan',
+                ],
                 $user->id,
             );
 
@@ -354,6 +379,22 @@ class PesananService
         }
 
         return $terkini;
+    }
+
+    /** Lock shipment stage together with its order and reject invalid transitions. */
+    private function kunciPengiriman(Pesanan $pesanan, string $status): Pengiriman
+    {
+        $pengiriman = $pesanan->pengiriman()->lockForUpdate()->first();
+
+        if (! $pengiriman || $pengiriman->status !== $status) {
+            throw new ApiException(
+                'Status pengiriman tidak sesuai untuk tindakan ini.',
+                409,
+                'STATUS_PENGIRIMAN_TIDAK_VALID',
+            );
+        }
+
+        return $pengiriman;
     }
 
     /** Retail hanya boleh mengubah pesanan tokonya sendiri. */

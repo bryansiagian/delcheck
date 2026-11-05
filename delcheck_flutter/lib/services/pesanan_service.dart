@@ -41,8 +41,9 @@ class PesananService {
       if (status != null && status.isNotEmpty) 'status': status,
       if (q.trim().isNotEmpty) 'q': q.trim(),
     };
-    final body = await _api
-        .get(Uri(path: '/pesanan', queryParameters: query).toString());
+    final body = await _api.get(
+      Uri(path: '/pesanan', queryParameters: query).toString(),
+    );
 
     final data = _data(body);
     final rawItems = data['items'] is List ? data['items'] as List : const [];
@@ -67,14 +68,18 @@ class PesananService {
     required List<Map<String, int>> items,
     String? catatan,
   }) async {
-    final body = await _api.post('/pesanan', body: {
-      'items': items,
-      'catatan': catatan,
-    });
+    final body = await _api.post(
+      '/pesanan',
+      body: {'items': items, 'catatan': catatan},
+    );
     return Pesanan.fromJson(_data(body));
   }
 
-  Future<Pesanan> _aksi(int id, String aksi, [Map<String, dynamic>? body]) async {
+  Future<Pesanan> _aksi(
+    int id,
+    String aksi, [
+    Map<String, dynamic>? body,
+  ]) async {
     final res = await _api.post('/pesanan/$id/$aksi', body: body);
     return Pesanan.fromJson(_data(res));
   }
@@ -89,8 +94,8 @@ class PesananService {
   Future<Pesanan> tolak(int id, String alasan) =>
       _aksi(id, 'tolak', {'alasan': alasan});
 
-  // Warehouse / Admin
-  Future<Pesanan> proses(int id) => _aksi(id, 'proses');
-  Future<Pesanan> kirim(int id, Map<String, dynamic> data) =>
-      _aksi(id, 'kirim', data);
+  // Admin
+  Future<Pesanan> catatPengiriman(int id, Map<String, dynamic> data) =>
+      _aksi(id, 'catat-pengiriman', data);
+  Future<Pesanan> tandaiJalan(int id) => _aksi(id, 'tandai-jalan');
 }

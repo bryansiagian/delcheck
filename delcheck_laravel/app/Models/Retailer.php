@@ -6,6 +6,7 @@ use App\Enums\StatusVerifikasi;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Retailer extends Model
@@ -65,5 +66,10 @@ class Retailer extends Model
             ->wherePivot('is_active', true)
             ->withPivot(['mulai', 'selesai', 'is_active'])
             ->withTimestamps();
+    }
+
+    public function retur(): HasMany
+    {
+        return $this->hasMany(Retur::class, 'retailer_id');
     }
 }

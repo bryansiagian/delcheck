@@ -17,10 +17,11 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
   static const _primary = Color(0xFF2563EB);
   static const _headerStart = Color(0xFF1D4ED8);
   static const _headerEnd = Color(0xFF3B82F6);
-  static const _background = Color(0xFFF1F5F9);
-  static const _textPrimary = Color(0xFF0F172A);
-  static const _textSecondary = Color(0xFF64748B);
-  static const _border = Color(0xFFE2E8F0);
+  static const _background = Color(0xFFF8F9FF);
+  static const _textPrimary = Color(0xFF0B1C30);
+  static const _textSecondary = Color(0xFF4D556B);
+  static const _outline = Color(0xFF737686);
+  static const _border = Color(0xFFE5EEFF);
 
   late final PenggunaService _service;
   late final int? _idSaya;
@@ -192,7 +193,7 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
   }) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: EdgeInsets.zero,
       child: Row(
         children: [
           for (final (nilai, label) in pilihan)
@@ -204,17 +205,21 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
                 onSelected: (_) => onPilih(nilai),
                 showCheckmark: false,
                 labelStyle: TextStyle(
-                  color: terpilih == nilai ? Colors.white : _textSecondary,
+                  color: terpilih == nilai ? _primary : _textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
-                selectedColor: _primary,
-                backgroundColor: Colors.white,
-                side: BorderSide(color: terpilih == nilai ? _primary : _border),
+                selectedColor: const Color(0xFFE5EEFF),
+                backgroundColor: Colors.transparent,
+                side: BorderSide.none,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(13),
+                  borderRadius: BorderRadius.circular(18),
                 ),
                 materialTapTargetSize: MaterialTapTargetSize.padded,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
             ),
         ],
@@ -232,7 +237,7 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
       catatan = 'Akun Anda tidak dapat dinonaktifkan.';
     } else if (terkunci) {
       catatan =
-          'Toko belum disetujui: proses lewat menu Verifikasi Pendaftaran.';
+          'Toko belum disetujui: periksa status melalui menu Verifikasi Pendaftaran.';
     }
 
     final inisial = p.name
@@ -245,16 +250,15 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
 
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(24),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _border),
+          borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: _textPrimary.withValues(alpha: 0.035),
-              blurRadius: 16,
-              offset: const Offset(0, 5),
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -272,8 +276,8 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: p.isActive
-                          ? const Color(0xFFDBEAFE)
-                          : const Color(0xFFF1F5F9),
+                          ? const Color(0xFFD3E4FE)
+                          : const Color(0xFFE5EEFF),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Text(
@@ -307,7 +311,7 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
                               ),
                             ),
                             if (saya)
-                              _badge('Anda', const Color(0xFFDBEAFE), _primary),
+                              _badge('Anda', const Color(0xFFD3E4FE), _primary),
                           ],
                         ),
                         const SizedBox(height: 5),
@@ -342,7 +346,7 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
                 runSpacing: 7,
                 children: [
                   if (p.roles.isEmpty)
-                    _badge('-', const Color(0xFFF1F5F9), _textSecondary)
+                    _badge('-', const Color(0xFFE5EEFF), _textSecondary)
                   else
                     for (final role in p.roles) _badgeRole(role),
                   _badgeStatus(p.isActive),
@@ -363,7 +367,7 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
                           p.isActive ? 'Akun aktif' : 'Akun nonaktif',
                           style: TextStyle(
                             color: p.isActive
-                                ? const Color(0xFF16A34A)
+                                ? const Color(0xFF0D9488)
                                 : _textSecondary,
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
@@ -400,7 +404,7 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
                           ? null
                           : (value) => _ubahStatus(p, value),
                       activeThumbColor: Colors.white,
-                      activeTrackColor: const Color(0xFF16A34A),
+                      activeTrackColor: const Color(0xFF0D9488),
                       inactiveThumbColor: Colors.white,
                       inactiveTrackColor: const Color(0xFFCBD5E1),
                     ),
@@ -446,11 +450,11 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
 
   Widget _badgeRole(String role) {
     final (background, foreground) = switch (role.toLowerCase()) {
-      'admin' => (const Color(0xFFEDE9FE), const Color(0xFF6D28D9)),
-      'sales' => (const Color(0xFFDBEAFE), _primary),
+      'admin' => (const Color(0xFFDCE9FF), const Color(0xFF004AC6)),
+      'sales' => (const Color(0xFFE5EEFF), _primary),
       'retail' => (const Color(0xFFCCFBF1), const Color(0xFF0F766E)),
-      'warehouse' => (const Color(0xFFFFEDD5), const Color(0xFFC2410C)),
-      _ => (const Color(0xFFF1F5F9), _textSecondary),
+      'warehouse' => (const Color(0xFFFFDBCA), const Color(0xFF9D4300)),
+      _ => (const Color(0xFFE5EEFF), _textSecondary),
     };
     final label = role.isEmpty
         ? '-'
@@ -464,13 +468,13 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
       Icon(
         aktif ? Icons.check_circle_rounded : Icons.pause_circle_outline,
         size: 14,
-        color: aktif ? const Color(0xFF16A34A) : _textSecondary,
+        color: aktif ? const Color(0xFF0D9488) : const Color(0xFFBA1A1A),
       ),
       const SizedBox(width: 5),
       _badge(
         aktif ? 'Aktif' : 'Nonaktif',
-        aktif ? const Color(0xFFDCFCE7) : const Color(0xFFF1F5F9),
-        aktif ? const Color(0xFF16A34A) : _textSecondary,
+        aktif ? const Color(0xFFCCFBF1) : const Color(0xFFFFDAD6),
+        aktif ? const Color(0xFF0D9488) : const Color(0xFFBA1A1A),
       ),
     ],
   );
@@ -535,7 +539,7 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
     return ListView.separated(
       controller: _scroll,
       physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
       itemCount: _items.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (_, i) {
@@ -577,15 +581,7 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Container(
-          width: 72,
-          height: 72,
-          decoration: BoxDecoration(
-            color: const Color(0xFFDBEAFE),
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: Icon(ikon, size: 34, color: _primary),
-        ),
+        Icon(ikon, size: 52, color: const Color(0xFFCBD5E1)),
         const SizedBox(height: 16),
         Text(
           judul,
@@ -618,54 +614,7 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
       body: Column(
         children: [
           _header(context),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
-            child: _kolomPencarian(),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 2, 20, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Filter peran',
-                style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          _barisFilter<String?>(
-            pilihan: _filterRole,
-            terpilih: _role,
-            onPilih: (v) {
-              setState(() => _role = v);
-              _muatAwal();
-            },
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 10, 20, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Filter status akun',
-                style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-          _barisFilter<bool?>(
-            pilihan: _filterStatus,
-            terpilih: _aktif,
-            onPilih: (v) {
-              setState(() => _aktif = v);
-              _muatAwal();
-            },
-          ),
+          _panelFilter(),
           if (!_memuat && _error == null) _ringkasanJumlah(),
           Expanded(
             child: RefreshIndicator(
@@ -682,58 +631,48 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
   Widget _header(BuildContext context) => Container(
     width: double.infinity,
     padding: EdgeInsets.fromLTRB(
-      20,
-      MediaQuery.paddingOf(context).top + 8,
-      20,
-      26,
+      16,
+      MediaQuery.paddingOf(context).top + 20,
+      16,
+      36,
     ),
-    decoration: const BoxDecoration(
+    decoration: BoxDecoration(
       gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
         colors: [_headerStart, _headerEnd],
       ),
-      borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
+      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x291D4ED8),
+          blurRadius: 16,
+          offset: Offset(0, 4),
+        ),
+      ],
     ),
-    child: Stack(
-      clipBehavior: Clip.none,
+    child: Column(
       children: [
-        Positioned(
-          top: -70,
-          right: -44,
-          child: Container(
-            width: 160,
-            height: 160,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
-        Positioned(
-          top: 34,
-          left: 68,
-          child: Container(
-            width: 54,
-            height: 54,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              shape: BoxShape.circle,
-            ),
-          ),
-        ),
         Row(
           children: [
-            Material(
-              color: Colors.white.withValues(alpha: 0.18),
-              shape: const CircleBorder(),
-              child: IconButton(
-                tooltip: 'Kembali',
-                onPressed: () => Navigator.maybePop(context),
-                icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+            InkWell(
+              onTap: () => Navigator.maybePop(context),
+              borderRadius: BorderRadius.circular(24),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.arrow_back,
+                  color: Colors.white,
+                  size: 22,
+                ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 14),
             const Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -743,38 +682,48 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.3,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                   SizedBox(height: 3),
                   Text(
                     'Kelola pengguna dan hak akses',
-                    style: TextStyle(
-                      color: Color(0xFFDCEAFF),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: TextStyle(color: Color(0xFFDBEAFE), fontSize: 12),
                   ),
                 ],
               ),
             ),
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.manage_accounts_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
           ],
         ),
+        const SizedBox(height: 16),
+        _kolomPencarian(),
       ],
     ),
   );
 
   Widget _kolomPencarian() => Container(
+    height: 50,
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
       boxShadow: [
         BoxShadow(
-          color: _textPrimary.withValues(alpha: 0.035),
-          blurRadius: 14,
-          offset: const Offset(0, 4),
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 8,
+          offset: const Offset(0, 2),
         ),
       ],
     ),
@@ -785,66 +734,115 @@ class _AdminPenggunaScreenState extends State<AdminPenggunaScreen> {
       onChanged: (_) => setState(() {}),
       decoration: InputDecoration(
         hintText: 'Cari nama, email, telepon, atau nama toko',
-        hintStyle: const TextStyle(color: _textSecondary, fontSize: 13),
-        prefixIcon: const Icon(Icons.search_rounded, color: _textSecondary),
+        hintStyle: const TextStyle(color: _outline, fontSize: 13),
+        prefixIcon: const Icon(Icons.search, color: _outline, size: 22),
         suffixIcon: _cari.text.isEmpty
             ? null
             : IconButton(
                 tooltip: 'Hapus pencarian',
-                icon: const Icon(Icons.close_rounded),
+                icon: const Icon(Icons.clear, size: 20),
                 onPressed: () {
                   _cari.clear();
                   setState(() {});
                   _muatAwal();
                 },
               ),
-        contentPadding: const EdgeInsets.symmetric(vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
+        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+        border: InputBorder.none,
+      ),
+    ),
+  );
+
+  Widget _panelFilter() => Transform.translate(
+    offset: const Offset(0, -22),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F172A).withValues(alpha: 0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: _primary, width: 1.5),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(8, 2, 8, 5),
+              child: Text(
+                'Peran',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            _barisFilter<String?>(
+              pilihan: _filterRole,
+              terpilih: _role,
+              onPilih: (value) {
+                setState(() => _role = value);
+                _muatAwal();
+              },
+            ),
+            const Divider(height: 16, color: _border),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(8, 0, 8, 5),
+              child: Text(
+                'Status akun',
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            _barisFilter<bool?>(
+              pilihan: _filterStatus,
+              terpilih: _aktif,
+              onPilih: (value) {
+                setState(() => _aktif = value);
+                _muatAwal();
+              },
+            ),
+          ],
         ),
       ),
     ),
   );
 
-  Widget _ringkasanJumlah() => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-    child: Row(
-      children: [
-        const Expanded(
-          child: Text(
-            'Daftar pengguna',
-            style: TextStyle(
-              color: _textPrimary,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFFDBEAFE),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            '$_total akun ditemukan',
-            style: const TextStyle(
+  Widget _ringkasanJumlah() => Transform.translate(
+    offset: const Offset(0, -22),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: const BoxDecoration(
               color: _primary,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+              shape: BoxShape.circle,
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 6),
+          Text(
+            'Menampilkan $_total pengguna',
+            style: const TextStyle(
+              fontSize: 12,
+              color: _outline,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }

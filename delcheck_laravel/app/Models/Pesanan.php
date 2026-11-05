@@ -6,6 +6,7 @@ use App\Enums\StatusPesanan;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Pesanan extends Model
 {
@@ -69,8 +70,13 @@ class Pesanan extends Model
         return $this->hasMany(ItemPesanan::class);
     }
 
-    public function pengiriman(): HasMany
+    public function pengiriman(): HasOne
     {
-        return $this->hasMany(Pengiriman::class);
+        return $this->hasOne(Pengiriman::class);
+    }
+
+    public function retur(): HasMany
+    {
+        return $this->hasMany(Retur::class, 'pesanan_id');
     }
 }

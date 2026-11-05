@@ -11,21 +11,19 @@ class CatatPengirimanBottomSheet extends StatefulWidget {
   });
 
   final Pesanan pesanan;
-  final Future<void> Function(Map<String, dynamic> data) onSubmit;
+  final Future<bool> Function(Map<String, dynamic> data) onSubmit;
 
   static Future<void> show({
     required BuildContext context,
     required Pesanan pesanan,
-    required Future<void> Function(Map<String, dynamic> data) onSubmit,
+    required Future<bool> Function(Map<String, dynamic> data) onSubmit,
   }) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => CatatPengirimanBottomSheet(
-        pesanan: pesanan,
-        onSubmit: onSubmit,
-      ),
+      builder: (_) =>
+          CatatPengirimanBottomSheet(pesanan: pesanan, onSubmit: onSubmit),
     );
   }
 
@@ -37,10 +35,13 @@ class CatatPengirimanBottomSheet extends StatefulWidget {
 class _CatatPengirimanBottomSheetState
     extends State<CatatPengirimanBottomSheet> {
   final _formKey = GlobalKey<FormState>();
-  final _namaDriverCtrl = TextEditingController(text: 'Bambang Supriyadi');
-  final _teleponDriverCtrl = TextEditingController(text: '081260449210');
-  final _platCtrl = TextEditingController(text: 'BK 8392 GA');
+  final _namaDriverCtrl = TextEditingController();
+  final _teleponDriverCtrl = TextEditingController();
+  final _platCtrl = TextEditingController();
+  final _suratCtrl = TextEditingController();
   final _catatanCtrl = TextEditingController();
+  DateTime _tanggalKirim = DateTime.now();
+  DateTime? _estimasiTiba;
 
   bool _memuat = false;
 
@@ -56,8 +57,35 @@ class _CatatPengirimanBottomSheetState
     _namaDriverCtrl.dispose();
     _teleponDriverCtrl.dispose();
     _platCtrl.dispose();
+    _suratCtrl.dispose();
     _catatanCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pilihTanggalKirim() async {
+    final tanggal = await showDatePicker(
+      context: context,
+      initialDate: _tanggalKirim,
+      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+      lastDate: DateTime.now().add(const Duration(days: 90)),
+    );
+    if (tanggal == null) return;
+    setState(() {
+      _tanggalKirim = tanggal;
+      if (_estimasiTiba != null && _estimasiTiba!.isBefore(tanggal)) {
+        _estimasiTiba = null;
+      }
+    });
+  }
+
+  Future<void> _pilihEstimasiTiba() async {
+    final tanggal = await showDatePicker(
+      context: context,
+      initialDate: _estimasiTiba ?? _tanggalKirim,
+      firstDate: _tanggalKirim,
+      lastDate: _tanggalKirim.add(const Duration(days: 180)),
+    );
+    if (tanggal != null) setState(() => _estimasiTiba = tanggal);
   }
 
   Future<void> _submit() async {
@@ -71,25 +99,28 @@ class _CatatPengirimanBottomSheetState
     final note = _catatanCtrl.text.trim();
 
     // Menggabungkan keterangan agar tercatat lengkap di backend
-    final catatanLengkap = [
-      if (nama.isNotEmpty) 'Kurir: $nama',
-      if (telp.isNotEmpty) 'Telp: $telp',
-      if (plat.isNotEmpty) 'Plat: $plat',
-      if (note.isNotEmpty) note,
-    ].join(' | ');
-
     final payload = <String, dynamic>{
-      'tanggal_kirim': tanggalApi(DateTime.now()),
-      'nomor_surat_jalan': plat,
+      'tanggal_kirim': tanggalApi(_tanggalKirim),
+      'estimasi_tiba': _estimasiTiba == null
+          ? null
+          : tanggalApi(_estimasiTiba!),
+      'nomor_surat_jalan': _suratCtrl.text.trim().isEmpty
+          ? null
+          : _suratCtrl.text.trim(),
       'nama_pengemudi': nama,
       'telepon_pengemudi': telp,
       'nomor_kendaraan': plat,
-      'catatan': catatanLengkap,
+      'catatan': note.isEmpty ? null : note,
     };
 
     try {
-      await widget.onSubmit(payload);
-      if (mounted) Navigator.pop(context);
+      final berhasil = await widget.onSubmit(payload);
+      if (!mounted) return;
+      if (berhasil) {
+        Navigator.pop(context);
+      } else {
+        setState(() => _memuat = false);
+      }
     } catch (_) {
       if (mounted) setState(() => _memuat = false);
     }
@@ -153,13 +184,16 @@ class _CatatPengirimanBottomSheetState
                                 color: _primary,
                               ),
                             ),
-                            const Text(' • ',
-                                style: TextStyle(
-                                    color: _textMuted, fontSize: 12)),
+                            const Text(
+                              ' • ',
+                              style: TextStyle(color: _textMuted, fontSize: 12),
+                            ),
                             Text(
                               widget.pesanan.tokoNama ?? 'Retail Store',
                               style: const TextStyle(
-                                  fontSize: 12, color: _textMuted),
+                                fontSize: 12,
+                                color: _textMuted,
+                              ),
                             ),
                           ],
                         ),
@@ -172,8 +206,11 @@ class _CatatPengirimanBottomSheetState
                         color: _cardBg,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.local_shipping_outlined,
-                          color: _primary, size: 20),
+                      child: const Icon(
+                        Icons.local_shipping_outlined,
+                        color: _primary,
+                        size: 20,
+                      ),
                     ),
                   ],
                 ),
@@ -188,8 +225,9 @@ class _CatatPengirimanBottomSheetState
                     hint: 'Masukkan nama pengemudi',
                     icon: Icons.person_outline_rounded,
                   ),
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Nama wajib diisi' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Nama wajib diisi'
+                      : null,
                 ),
                 const SizedBox(height: 14),
 
@@ -225,13 +263,43 @@ class _CatatPengirimanBottomSheetState
                 ),
                 const SizedBox(height: 14),
 
+                // Informasi surat jalan dan jadwal yang juga disimpan API.
+                _buildLabel('No. surat jalan / resi (opsional)'),
+                TextFormField(
+                  controller: _suratCtrl,
+                  maxLength: 40,
+                  decoration: _inputDecoration(
+                    hint: 'Nomor surat jalan atau resi',
+                    icon: Icons.receipt_long_outlined,
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _pilihTanggalKirim,
+                  icon: const Icon(Icons.event_outlined),
+                  label: Text(
+                    'Tanggal rencana: ${formatTanggal(_tanggalKirim)}',
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: _pilihEstimasiTiba,
+                  icon: const Icon(Icons.event_available_outlined),
+                  label: Text(
+                    _estimasiTiba == null
+                        ? 'Estimasi tiba (opsional)'
+                        : 'Estimasi tiba: ${formatTanggal(_estimasiTiba!)}',
+                  ),
+                ),
+                const SizedBox(height: 14),
+
                 // 6. Form Input: Catatan Opsional
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _buildLabel('Catatan (opsional)'),
-                    const Text('Maks. 200 karakter',
-                        style: TextStyle(fontSize: 11, color: Color(0xFF737686))),
+                    const Text(
+                      'Maks. 200 karakter',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF737686)),
+                    ),
                   ],
                 ),
                 TextFormField(
@@ -260,7 +328,7 @@ class _CatatPengirimanBottomSheetState
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          'Status pengiriman akan otomatis berpindah ke Dalam Pengantaran.',
+                          'Stok akan dikurangi saat pengiriman dicatat. Tandai Jalan dilakukan terpisah setelah kurir berangkat.',
                           style: TextStyle(
                             fontSize: 12,
                             color: _textDark,
@@ -344,8 +412,7 @@ class _CatatPengirimanBottomSheetState
         padding: EdgeInsets.only(bottom: alignTop ? 38 : 0),
         child: Icon(icon, color: _textMuted, size: 20),
       ),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: const BorderSide(color: Color(0xFFE2E8F0)),

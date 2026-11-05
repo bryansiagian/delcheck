@@ -12,7 +12,7 @@ import '../widgets/status_pesanan_chip.dart';
 /// Detail pesanan. Tombol aksi menyesuaikan peran dan status:
 ///  - Retail   : batalkan (menunggu), konfirmasi diterima (dalam perjalanan)
 ///  - Sales    : setujui / tolak (menunggu)
-///  - Warehouse/Admin : bersama kurir / dalam perjalanan (dikonfirmasi, diproses)
+///  - Admin    : catat pengiriman (dikonfirmasi), tandai jalan (Kurir)
 class PesananDetailScreen extends StatefulWidget {
   const PesananDetailScreen({super.key, required this.id});
 
@@ -51,17 +51,18 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
     }
   }
 
-  Future<void> _jalankan(
-      Future<Pesanan> Function() aksi, String sukses) async {
+  Future<bool> _jalankan(Future<Pesanan> Function() aksi, String sukses) async {
     setState(() => _bekerja = true);
     try {
       final baru = await aksi();
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() => _p = baru);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(sukses)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(sukses)));
+      return true;
     } on ApiException catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -69,13 +70,15 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
           content: Text(e.message),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Tutup')),
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Tutup'),
+            ),
           ],
         ),
       );
       // Status sudah berubah di sisi server: muat ulang tampilan.
       if (mounted && e.kode == 'STATUS_PESANAN_TIDAK_VALID') _muat();
+      return false;
     } finally {
       if (mounted) setState(() => _bekerja = false);
     }
@@ -89,11 +92,13 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
         content: Text(isi),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Batal')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
           FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(tombol)),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tombol),
+          ),
         ],
       ),
     );
@@ -111,7 +116,10 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
   Future<void> _batalkan(Pesanan p) async {
     final alasan = await _mintaAlasan('Batalkan pesanan', 'Alasan pembatalan');
     if (alasan == null || !mounted) return;
-    await _jalankan(() => _service.batalkan(p.id, alasan), 'Pesanan dibatalkan.');
+    await _jalankan(
+      () => _service.batalkan(p.id, alasan),
+      'Pesanan dibatalkan.',
+    );
   }
 
   Future<void> _terima(Pesanan p) async {
@@ -121,7 +129,10 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
       'Ya, sudah diterima',
     );
     if (!ya) return;
-    await _jalankan(() => _service.terima(p.id), 'Pesanan dikonfirmasi diterima.');
+    await _jalankan(
+      () => _service.terima(p.id),
+      'Pesanan dikonfirmasi diterima.',
+    );
   }
 
   // ---- aksi Sales
@@ -141,37 +152,36 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
     await _jalankan(() => _service.tolak(p.id, alasan), 'Pesanan ditolak.');
   }
 
-  // ---- aksi Warehouse / Admin
-  Future<void> _proses(Pesanan p) async {
-    final ya = await _konfirmasi(
-      'Barang sudah bersama kurir?',
-      'Tandai pesanan ${p.nomor} sudah diserahkan ke kurir. '
-          'Stok belum berkurang sampai Anda menandai "Dalam perjalanan".',
-      'Ya, bersama kurir',
+  // ---- aksi Admin
+  Future<void> _catatPengiriman(Pesanan p) async {
+    await CatatPengirimanBottomSheet.show(
+      context: context,
+      pesanan: p,
+      onSubmit: (data) => _jalankan(
+        () => _service.catatPengiriman(p.id, data),
+        'Pengiriman dicatat dan stok diperbarui.',
+      ),
     );
-    if (!ya) return;
-    await _jalankan(() => _service.proses(p.id), 'Pesanan diserahkan ke kurir.');
   }
 
-  Future<void> _kirim(Pesanan p) async {
-      await CatatPengirimanBottomSheet.show(
-        context: context,
-        pesanan: p,
-        onSubmit: (data) async {
-          await _jalankan(
-            () => _service.kirim(p.id, data),
-            'Pengiriman berhasil dicatat dan diserahkan ke kurir.',
-          );
-        },
-      );
-    }
+  Future<void> _tandaiJalan(Pesanan p) async {
+    final ya = await _konfirmasi(
+      'Tandai pesanan jalan?',
+      'Konfirmasikan bahwa kurir telah mengabarkan pesanan ini berangkat.',
+      'Tandai Jalan',
+    );
+    if (!ya) return;
+    await _jalankan(
+      () => _service.tandaiJalan(p.id),
+      'Pesanan ditandai sedang dalam perjalanan.',
+    );
+  }
 
   Widget? _aksiBar(Pesanan p) {
     final user = context.read<AuthProvider>().user;
     final retail = user?.punyaPeran('retail') ?? false;
     final sales = user?.punyaPeran('sales') ?? false;
-    final gudang = (user?.punyaPeran('warehouse') ?? false) ||
-        (user?.punyaPeran('admin') ?? false);
+    final admin = user?.punyaPeran('admin') ?? false;
 
     final List<Widget> tombol;
 
@@ -185,7 +195,9 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
           ),
         ),
       ];
-    } else if (retail && p.status == 'dikirim') {
+    } else if (retail &&
+        p.status == 'dikirim' &&
+        p.pengiriman?.status == 'jalan') {
       tombol = [
         Expanded(
           child: FilledButton.icon(
@@ -213,31 +225,25 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
           ),
         ),
       ];
-    } else if (gudang && p.status == 'dikonfirmasi') {
+    } else if (admin && p.status == 'dikonfirmasi' && p.pengiriman == null) {
       tombol = [
         Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _bekerja ? null : () => _proses(p),
-            icon: const Icon(Icons.handshake_outlined),
-            label: const Text('Bersama kurir'),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
           child: FilledButton.icon(
-            onPressed: _bekerja ? null : () => _kirim(p),
-            icon: const Icon(Icons.local_shipping_outlined),
-            label: const Text('Dalam perjalanan'),
+            onPressed: _bekerja ? null : () => _catatPengiriman(p),
+            icon: const Icon(Icons.edit_note_rounded),
+            label: const Text('Catat Pengiriman'),
           ),
         ),
       ];
-    } else if (gudang && p.status == 'diproses') {
+    } else if (admin &&
+        p.status == 'diproses' &&
+        p.pengiriman?.status == 'kurir') {
       tombol = [
         Expanded(
           child: FilledButton.icon(
-            onPressed: _bekerja ? null : () => _kirim(p),
+            onPressed: _bekerja ? null : () => _tandaiJalan(p),
             icon: const Icon(Icons.local_shipping_outlined),
-            label: const Text('Dalam perjalanan'),
+            label: const Text('Tandai Jalan'),
           ),
         ),
       ];
@@ -262,25 +268,29 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
       body: _memuat && p == null
           ? const Center(child: CircularProgressIndicator())
           : p == null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(_error ?? 'Pesanan tidak ditemukan.',
-                            textAlign: TextAlign.center),
-                        const SizedBox(height: 12),
-                        FilledButton.tonal(
-                            onPressed: _muat, child: const Text('Coba lagi')),
-                      ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _error ?? 'Pesanan tidak ditemukan.',
+                      textAlign: TextAlign.center,
                     ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _muat,
-                  child: _Isi(pesanan: p),
+                    const SizedBox(height: 12),
+                    FilledButton.tonal(
+                      onPressed: _muat,
+                      child: const Text('Coba lagi'),
+                    ),
+                  ],
                 ),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _muat,
+              child: _Isi(pesanan: p),
+            ),
       bottomNavigationBar: p == null ? null : _aksiBar(p),
     );
   }
@@ -296,16 +306,34 @@ class _Isi extends StatelessWidget {
     final p = pesanan;
     final tema = Theme.of(context);
 
+    final statusKirim = p.pengiriman?.status;
+    final statusKonsisten = switch (p.status) {
+      'menunggu_konfirmasi_sales' || 'ditolak' || 'dibatalkan' =>
+        p.pengiriman == null,
+      'dikonfirmasi' => p.pengiriman == null,
+      'diproses' => statusKirim == 'kurir',
+      'dikirim' => statusKirim == 'jalan',
+      'diterima' || 'selesai' => statusKirim == 'diterima',
+      _ => true,
+    };
     final linimasa = <MapEntry<String, DateTime?>>[
-      MapEntry('Pesanan dibuat', p.dibuat),
+      MapEntry('Siap', p.dikonfirmasiAt),
       MapEntry(
-          p.status == 'ditolak' ? 'Ditolak sales' : 'Dikonfirmasi sales',
-          p.dikonfirmasiAt),
-      MapEntry('Diserahkan ke kurir', p.diprosesAt),
-      MapEntry('Dalam perjalanan', p.dikirimAt),
-      MapEntry('Diterima toko', p.diterimaAt),
-      MapEntry('Dibatalkan', p.dibatalkanAt),
-    ].where((e) => e.value != null).toList();
+        'Kurir',
+        statusKirim == 'kurir' ||
+                statusKirim == 'jalan' ||
+                statusKirim == 'diterima'
+            ? p.diprosesAt
+            : null,
+      ),
+      MapEntry(
+        'Jalan',
+        statusKirim == 'jalan' || statusKirim == 'diterima'
+            ? p.dikirimAt
+            : null,
+      ),
+      MapEntry('Diterima', statusKirim == 'diterima' ? p.diterimaAt : null),
+    ];
 
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -320,9 +348,12 @@ class _Isi extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(p.tokoNama ?? 'Pesanan',
-                          style: tema.textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold)),
+                      child: Text(
+                        p.tokoNama ?? 'Pesanan',
+                        style: tema.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     StatusPesananChip(status: p.status),
                   ],
@@ -333,8 +364,10 @@ class _Isi extends StatelessWidget {
                 ],
                 if (p.salesNama != null) ...[
                   const SizedBox(height: 8),
-                  Text('Dikonfirmasi oleh ${p.salesNama}',
-                      style: tema.textTheme.bodySmall),
+                  Text(
+                    'Dikonfirmasi oleh ${p.salesNama}',
+                    style: tema.textTheme.bodySmall,
+                  ),
                 ],
                 if (p.catatan != null) ...[
                   const SizedBox(height: 8),
@@ -349,6 +382,10 @@ class _Isi extends StatelessWidget {
           _Peringatan(teks: 'Ditolak: ${p.alasanDitolak}'),
         if (p.alasanBatal != null)
           _Peringatan(teks: 'Dibatalkan: ${p.alasanBatal}'),
+        if (!statusKonsisten)
+          const _Peringatan(
+            teks: 'Status pesanan dan pengiriman tidak sesuai. Silakan hubungi Admin.',
+          ),
 
         // ---- barang
         Padding(
@@ -362,8 +399,10 @@ class _Isi extends StatelessWidget {
               children: [
                 for (final item in p.items)
                   Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -371,12 +410,16 @@ class _Isi extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(item.namaProduk,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600)),
                               Text(
-                                  '${formatAngka(item.qty)} ${item.satuan} × ${formatRupiah(item.harga)}',
-                                  style: tema.textTheme.bodySmall),
+                                item.namaProduk,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                '${formatAngka(item.qty)} ${item.satuan} × ${formatRupiah(item.harga)}',
+                                style: tema.textTheme.bodySmall,
+                              ),
                             ],
                           ),
                         ),
@@ -386,16 +429,21 @@ class _Isi extends StatelessWidget {
                   ),
                 const Divider(),
                 Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   child: Row(
                     children: [
                       Expanded(
-                          child: Text('Total',
-                              style: tema.textTheme.titleSmall)),
-                      Text(formatRupiah(p.total),
-                          style: tema.textTheme.titleMedium
-                              ?.copyWith(fontWeight: FontWeight.bold)),
+                        child: Text('Total', style: tema.textTheme.titleSmall),
+                      ),
+                      Text(
+                        formatRupiah(p.total),
+                        style: tema.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -415,18 +463,36 @@ class _Isi extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  _Baris('No. surat jalan / resi',
-                      p.pengiriman!.nomorSuratJalan),
                   _Baris(
-                      'Tanggal kirim',
-                      p.pengiriman!.tanggalKirim == null
-                          ? null
-                          : formatTanggal(p.pengiriman!.tanggalKirim!)),
+                    'No. surat jalan / resi',
+                    p.pengiriman!.nomorSuratJalan,
+                  ),
+                  _Baris('Status pengiriman', p.pengiriman!.status),
+                  _Baris('Nama pengemudi', p.pengiriman!.namaPengemudi),
+                  _Baris('Telepon pengemudi', p.pengiriman!.teleponPengemudi),
+                  _Baris('Nomor kendaraan', p.pengiriman!.nomorKendaraan),
                   _Baris(
-                      'Estimasi tiba',
-                      p.pengiriman!.estimasiTiba == null
-                          ? null
-                          : formatTanggal(p.pengiriman!.estimasiTiba!)),
+                    'Dicatat pada',
+                    p.diprosesAt == null
+                        ? null
+                        : formatTanggalJam(p.diprosesAt!),
+                  ),
+                  _Baris(
+                    'Berangkat pada',
+                    p.dikirimAt == null ? null : formatTanggalJam(p.dikirimAt!),
+                  ),
+                  _Baris(
+                    'Tanggal kirim',
+                    p.pengiriman!.tanggalKirim == null
+                        ? null
+                        : formatTanggal(p.pengiriman!.tanggalKirim!),
+                  ),
+                  _Baris(
+                    'Estimasi tiba',
+                    p.pengiriman!.estimasiTiba == null
+                        ? null
+                        : formatTanggal(p.pengiriman!.estimasiTiba!),
+                  ),
                   _Baris('Catatan', p.pengiriman!.catatan),
                 ],
               ),
@@ -445,7 +511,12 @@ class _Isi extends StatelessWidget {
             child: Column(
               children: [
                 for (final e in linimasa)
-                  _Baris(e.key, formatTanggalJam(e.value!)),
+                  _Baris(
+                    e.key,
+                    e.value == null
+                        ? 'Belum tercapai'
+                        : formatTanggalJam(e.value!),
+                  ),
               ],
             ),
           ),
@@ -471,8 +542,10 @@ class _Peringatan extends StatelessWidget {
         color: tema.colorScheme.errorContainer,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(teks,
-          style: TextStyle(color: tema.colorScheme.onErrorContainer)),
+      child: Text(
+        teks,
+        style: TextStyle(color: tema.colorScheme.onErrorContainer),
+      ),
     );
   }
 }
@@ -543,8 +616,9 @@ class _AlasanDialogState extends State<_AlasanDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Batal')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
         FilledButton(
           onPressed: () {
             if (_formKey.currentState!.validate()) {
@@ -616,9 +690,7 @@ class _KirimDialogState extends State<_KirimDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'Stok produk akan berkurang sesuai jumlah pesanan.',
-            ),
+            const Text('Stok produk akan berkurang sesuai jumlah pesanan.'),
             const SizedBox(height: 12),
             TextField(
               controller: _suratCtrl,
@@ -641,9 +713,11 @@ class _KirimDialogState extends State<_KirimDialog> {
                   child: OutlinedButton.icon(
                     onPressed: _pilihEstimasi,
                     icon: const Icon(Icons.event_available),
-                    label: Text(_estimasi == null
-                        ? 'Estimasi tiba (opsional)'
-                        : 'Tiba: ${formatTanggal(_estimasi!)}'),
+                    label: Text(
+                      _estimasi == null
+                          ? 'Estimasi tiba (opsional)'
+                          : 'Tiba: ${formatTanggal(_estimasi!)}',
+                    ),
                   ),
                 ),
                 if (_estimasi != null)
@@ -669,8 +743,9 @@ class _KirimDialogState extends State<_KirimDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Batal')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Batal'),
+        ),
         FilledButton(
           onPressed: () => Navigator.pop(context, <String, dynamic>{
             'tanggal_kirim': tanggalApi(_tanggal),

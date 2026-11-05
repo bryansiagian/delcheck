@@ -4,6 +4,9 @@ namespace Tests\Feature;
 
 use App\Enums\Peran;
 use App\Enums\StatusVerifikasi;
+use App\Models\AuditLog;
+use App\Models\MutasiStok;
+use App\Models\Pengiriman;
 use App\Models\Pesanan;
 use App\Models\Produk;
 use App\Models\Retailer;
@@ -11,7 +14,9 @@ use App\Models\StokProduk;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class PesananTest extends TestCase
@@ -86,6 +91,18 @@ class PesananTest extends TestCase
         Sanctum::actingAs($user);
 
         return $user;
+    }
+
+    private function dataPengiriman(array $override = []): array
+    {
+        return array_merge([
+            'nama_pengemudi' => 'Budi Santoso',
+            'telepon_pengemudi' => '081234567890',
+            'nomor_kendaraan' => 'BK 1234 AB',
+            'tanggal_kirim' => now()->toDateString(),
+            'nomor_surat_jalan' => 'SJ-001',
+            'catatan' => 'Rute utama',
+        ], $override);
     }
 
     // -------------------------------------------------------- Retail: buat
@@ -214,7 +231,53 @@ class PesananTest extends TestCase
         foreach ([Peran::Sales, Peran::Warehouse, Peran::Admin] as $peran) {
             $this->sebagai($peran);
             $this->getJson('/api/pesanan')->assertOk()->assertJsonCount(2, 'data.items');
+            if ($peran === Peran::Warehouse) {
+                $this->getJson("/api/pesanan/{$idA}")
+                    ->assertOk()
+                    ->assertJsonPath('data.id', $idA);
+            }
         }
+    }
+
+    public function test_permission_pesanan_admin_sales_dan_warehouse(): void
+    {
+        $admin = $this->buatUser(Peran::Admin);
+        $sales = $this->buatUser(Peran::Sales);
+        $warehouse = $this->buatUser(Peran::Warehouse);
+
+        $this->assertTrue($admin->can('pesanan.lihat-semua'));
+        $this->assertTrue($admin->can('pesanan.proses'));
+        $this->assertTrue($admin->can('pengiriman.perbarui'));
+        $this->assertTrue($admin->can('produk.kelola'));
+        $this->assertTrue($admin->can('stok.kelola'));
+        $this->assertFalse($admin->can('pesanan.konfirmasi'));
+
+        $this->assertTrue($sales->can('pesanan.konfirmasi'));
+        $this->assertFalse($sales->can('pesanan.proses'));
+        $this->assertFalse($sales->can('pengiriman.perbarui'));
+
+        $this->assertTrue($warehouse->can('pesanan.lihat-semua'));
+        $this->assertFalse($warehouse->can('pesanan.proses'));
+        $this->assertFalse($warehouse->can('pengiriman.perbarui'));
+        $this->assertTrue($warehouse->can('produk.kelola'));
+        $this->assertTrue($warehouse->can('stok.kelola'));
+        $this->assertTrue($warehouse->can('retur.pantau-logistik'));
+    }
+
+    public function test_seeder_memindahkan_izin_proses_tanpa_menghapus_izin_warehouse_lain(): void
+    {
+        $warehouseRole = Role::findByName(Peran::Warehouse->value, 'web');
+        $warehouseRole->givePermissionTo('pesanan.proses');
+        $warehouseRole->givePermissionTo('pengiriman.perbarui');
+
+        $this->seed(RolePermissionSeeder::class);
+
+        $warehouse = $this->buatUser(Peran::Warehouse);
+        $this->assertFalse($warehouse->can('pesanan.proses'));
+        $this->assertFalse($warehouse->can('pengiriman.perbarui'));
+        $this->assertTrue($warehouse->can('produk.kelola'));
+        $this->assertTrue($warehouse->can('stok.kelola'));
+        $this->assertTrue($warehouse->can('retur.pantau-logistik'));
     }
 
     public function test_filter_status_dan_pencarian(): void
@@ -232,6 +295,67 @@ class PesananTest extends TestCase
         $this->getJson('/api/pesanan?status=menunggu_konfirmasi_sales,dikonfirmasi')->assertOk()->assertJsonCount(2, 'data.items');
         $this->getJson('/api/pesanan?status=ngawur')->assertStatus(422);
         $this->getJson('/api/pesanan?q=Jaya')->assertOk()->assertJsonCount(1, 'data.items');
+    }
+
+    public function test_daftar_menyertakan_status_pengiriman_dan_mempertahankan_pagination(): void
+    {
+        $produk = $this->buatProduk(100);
+        $retailers = [];
+        $ids = [];
+        foreach (['dikonfirmasi', 'kurir', 'jalan', 'diterima'] as $tahap) {
+            $retail = $this->buatRetail("{$tahap}@toko.test", "Toko {$tahap}");
+            $retailers[$tahap] = $retail;
+            $ids[$tahap] = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 1]]);
+        }
+
+        $this->sebagai(Peran::Sales);
+        foreach ($ids as $id) {
+            $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
+        }
+
+        $this->sebagai(Peran::Admin);
+        foreach (['kurir', 'jalan', 'diterima'] as $tahap) {
+            $this->postJson("/api/pesanan/{$ids[$tahap]}/catat-pengiriman", $this->dataPengiriman())
+                ->assertOk();
+        }
+        foreach (['jalan', 'diterima'] as $tahap) {
+            $this->postJson("/api/pesanan/{$ids[$tahap]}/tandai-jalan")->assertOk();
+        }
+        Sanctum::actingAs($retailers['diterima']);
+        $this->postJson("/api/pesanan/{$ids['diterima']}/terima")->assertOk();
+
+        $pageOne = $this->actingAs($this->buatUser(Peran::Admin))
+            ->getJson('/api/pesanan?per_page=3')
+            ->assertOk()
+            ->assertJsonPath('data.meta.total', 4)
+            ->assertJsonPath('data.meta.halaman', 1)
+            ->assertJsonPath('data.meta.halaman_terakhir', 2);
+        $pageTwo = $this->getJson('/api/pesanan?page=2&per_page=3')
+            ->assertOk()
+            ->assertJsonPath('data.meta.halaman', 2)
+            ->assertJsonCount(1, 'data.items');
+
+        $itemByStatus = collect([
+            ...$pageOne->json('data.items'),
+            ...$pageTwo->json('data.items'),
+        ])->keyBy('status');
+
+        foreach ([
+            'dikonfirmasi' => null,
+            'diproses' => 'kurir',
+            'dikirim' => 'jalan',
+            'diterima' => 'diterima',
+        ] as $statusPesanan => $statusPengiriman) {
+            $item = $itemByStatus->get($statusPesanan);
+            $this->assertNotNull($item, "Daftar harus memuat pesanan {$statusPesanan}.");
+            $this->assertArrayHasKey('pengiriman', $item);
+            $this->assertSame($statusPengiriman, $item['pengiriman']['status'] ?? null);
+        }
+
+        $this->getJson("/api/pesanan/{$ids['diterima']}")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'diterima')
+            ->assertJsonPath('data.pengiriman.status', 'diterima');
     }
 
     // -------------------------------------------------------------- Sales
@@ -354,38 +478,11 @@ class PesananTest extends TestCase
 
     // ------------------------------------------------- Warehouse / Pengiriman
 
-    public function test_warehouse_menyerahkan_ke_kurir_setelah_dikonfirmasi(): void
+    public function test_admin_mencatat_pengiriman_dan_mengurangi_stok_satu_kali(): void
     {
         $retail = $this->buatRetail();
-        $produk = $this->buatProduk(100);
-        $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 1]]);
-
-        $warehouse = $this->sebagai(Peran::Warehouse);
-
-        // Belum dikonfirmasi Sales.
-        $this->postJson("/api/pesanan/{$id}/proses")
-            ->assertStatus(409)
-            ->assertJsonPath('kode', 'STATUS_PESANAN_TIDAK_VALID');
-
-        $this->sebagai(Peran::Sales);
-        $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
-
-        // Sales tidak boleh memproses pengiriman.
-        $this->postJson("/api/pesanan/{$id}/proses")->assertForbidden();
-
-        Sanctum::actingAs($warehouse);
-        $this->postJson("/api/pesanan/{$id}/proses")
-            ->assertOk()
-            ->assertJsonPath('data.status', 'diproses');
-
-        $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'diproses', 'diproses_oleh' => $warehouse->id]);
-    }
-
-    public function test_kirim_mengurangi_stok_dan_mencatat_pengiriman(): void
-    {
-        $retail = $this->buatRetail();
-        $mie = $this->buatProduk(100, ['harga' => 10000]);
-        $air = $this->buatProduk(50, ['harga' => 5000]);
+        $mie = $this->buatProduk(100);
+        $air = $this->buatProduk(50);
         $id = $this->pesan($retail, [
             ['produk_id' => $mie->id, 'qty' => 2],
             ['produk_id' => $air->id, 'qty' => 10],
@@ -393,21 +490,28 @@ class PesananTest extends TestCase
 
         $this->sebagai(Peran::Sales);
         $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())
+            ->assertForbidden();
 
         $admin = $this->sebagai(Peran::Admin);
-        $this->postJson("/api/pesanan/{$id}/kirim", [
-            'nomor_surat_jalan' => 'SJ-001',
+        $response = $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman([
             'estimasi_tiba' => now()->addDays(2)->toDateString(),
-            'catatan' => 'Kurir: Budi (JNE)',
-        ])
-            ->assertOk()
-            ->assertJsonPath('data.status', 'dikirim')
-            ->assertJsonPath('data.pengiriman.nomor_surat_jalan', 'SJ-001')
-            ->assertJsonPath('data.pengiriman.status', 'dikirim');
+        ]));
+        $response->assertOk()
+            ->assertJsonPath('data.status', 'diproses')
+            ->assertJsonPath('data.pengiriman.status', 'kurir')
+            ->assertJsonPath('data.pengiriman.nama_pengemudi', 'Budi Santoso')
+            ->assertJsonPath('data.pengiriman.telepon_pengemudi', '081234567890')
+            ->assertJsonPath('data.pengiriman.nomor_kendaraan', 'BK 1234 AB');
 
+        $this->assertDatabaseHas('pesanan', [
+            'id' => $id,
+            'status' => 'diproses',
+            'diproses_oleh' => $admin->id,
+        ]);
+        $this->assertNotNull(Pesanan::find($id)->diproses_at);
         $this->assertDatabaseHas('stok_produk', ['produk_id' => $mie->id, 'jumlah' => 98]);
         $this->assertDatabaseHas('stok_produk', ['produk_id' => $air->id, 'jumlah' => 40]);
-
         $this->assertDatabaseHas('mutasi_stok', [
             'produk_id' => $mie->id,
             'tipe' => 'keluar',
@@ -418,148 +522,349 @@ class PesananTest extends TestCase
             'referensi_id' => $id,
             'dibuat_oleh' => $admin->id,
         ]);
-
         $this->assertDatabaseHas('pengiriman', [
             'pesanan_id' => $id,
-            'status' => 'dikirim',
+            'status' => 'kurir',
+            'nama_pengemudi' => 'Budi Santoso',
+            'telepon_pengemudi' => '081234567890',
+            'nomor_kendaraan' => 'BK 1234 AB',
             'diperbarui_oleh' => $admin->id,
         ]);
-        $this->assertNotNull(Pesanan::find($id)->dikirim_at);
+        $this->assertSame(1, Pengiriman::where('pesanan_id', $id)->count());
+        $this->assertDatabaseHas('audit_logs', [
+            'auditable_type' => Pesanan::class,
+            'auditable_id' => $id,
+            'aksi' => 'pengiriman_dicatat',
+            'status_dari' => 'dikonfirmasi',
+            'status_ke' => 'diproses',
+            'user_id' => $admin->id,
+        ]);
+        $auditCatat = AuditLog::where('aksi', 'pengiriman_dicatat')->firstOrFail();
+        $this->assertNotNull($auditCatat->created_at);
+        $this->assertSame($id, $auditCatat->meta['pesanan_id']);
+        $this->assertSame($response->json('data.pengiriman.id'), $auditCatat->meta['pengiriman_id']);
+        $this->assertNull($auditCatat->meta['status_pengiriman_dari']);
+        $this->assertSame('kurir', $auditCatat->meta['status_pengiriman_ke']);
 
-        // Tidak bisa dikirim dua kali (stok tidak berkurang lagi).
-        $this->postJson("/api/pesanan/{$id}/kirim", [])->assertStatus(409);
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())
+            ->assertStatus(409);
+        $this->assertSame(1, Pengiriman::where('pesanan_id', $id)->count());
         $this->assertDatabaseHas('stok_produk', ['produk_id' => $mie->id, 'jumlah' => 98]);
     }
 
-    public function test_kirim_setelah_diserahkan_ke_kurir(): void
+    public function test_admin_menandai_jalan_tanpa_pengiriman_baru_atau_pengurangan_stok(): void
     {
         $retail = $this->buatRetail();
         $produk = $this->buatProduk(100);
         $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 4]]);
-
         $this->sebagai(Peran::Sales);
         $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
 
-        $this->sebagai(Peran::Warehouse);
-        $this->postJson("/api/pesanan/{$id}/proses")->assertOk();
-        $this->postJson("/api/pesanan/{$id}/kirim", [])
-            ->assertOk()
-            ->assertJsonPath('data.status', 'dikirim');
+        $admin = $this->sebagai(Peran::Admin);
+        $this->postJson("/api/pesanan/{$id}/tandai-jalan")->assertStatus(409);
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())
+            ->assertOk();
+        $stokSetelahCatat = (int) StokProduk::where('produk_id', $produk->id)->value('jumlah');
+        $mutasiSetelahCatat = MutasiStok::where('referensi_type', Pesanan::class)
+            ->where('referensi_id', $id)->count();
 
-        $this->assertDatabaseHas('stok_produk', ['produk_id' => $produk->id, 'jumlah' => 96]);
+        $this->postJson("/api/pesanan/{$id}/tandai-jalan")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'dikirim')
+            ->assertJsonPath('data.pengiriman.status', 'jalan');
+
+        $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'dikirim']);
+        $this->assertNotNull(Pesanan::find($id)->dikirim_at);
+        $this->assertDatabaseHas('pengiriman', [
+            'pesanan_id' => $id,
+            'status' => 'jalan',
+            'diperbarui_oleh' => $admin->id,
+        ]);
+        $this->assertSame(1, Pengiriman::where('pesanan_id', $id)->count());
+        $this->assertSame($stokSetelahCatat, (int) StokProduk::where('produk_id', $produk->id)->value('jumlah'));
+        $this->assertSame(
+            $mutasiSetelahCatat,
+            MutasiStok::where('referensi_type', Pesanan::class)->where('referensi_id', $id)->count(),
+        );
+        $this->assertDatabaseHas('audit_logs', [
+            'auditable_type' => Pesanan::class,
+            'auditable_id' => $id,
+            'aksi' => 'pesanan_dikirim',
+            'status_dari' => 'diproses',
+            'status_ke' => 'dikirim',
+            'user_id' => $admin->id,
+        ]);
+        $auditJalan = AuditLog::where('aksi', 'pesanan_dikirim')->firstOrFail();
+        $this->assertNotNull($auditJalan->created_at);
+        $this->assertSame($id, $auditJalan->meta['pesanan_id']);
+        $this->assertSame(
+            Pengiriman::where('pesanan_id', $id)->value('id'),
+            $auditJalan->meta['pengiriman_id'],
+        );
+        $this->assertSame('kurir', $auditJalan->meta['status_pengiriman_dari']);
+        $this->assertSame('jalan', $auditJalan->meta['status_pengiriman_ke']);
+
+        $this->postJson("/api/pesanan/{$id}/tandai-jalan")->assertStatus(409);
+        $this->assertSame(1, Pengiriman::where('pesanan_id', $id)->count());
+        $this->assertSame($stokSetelahCatat, (int) StokProduk::where('produk_id', $produk->id)->value('jumlah'));
     }
 
-    public function test_kirim_ditolak_jika_stok_tidak_cukup(): void
+    public function test_warehouse_tetap_membaca_pesanan_tetapi_tidak_bisa_mencatat_atau_menandai_jalan(): void
+    {
+        $retail = $this->buatRetail();
+        $produk = $this->buatProduk(100);
+        $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 1]]);
+        $this->sebagai(Peran::Sales);
+        $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
+
+        $warehouse = $this->sebagai(Peran::Warehouse);
+        $warehouse->givePermissionTo('pesanan.proses');
+        $warehouse->givePermissionTo('pengiriman.perbarui');
+        $this->getJson('/api/pesanan')->assertOk()->assertJsonPath('data.items.0.id', $id);
+        $this->getJson("/api/pesanan/{$id}")->assertOk()->assertJsonPath('data.id', $id);
+
+        $stokSebelum = (int) StokProduk::where('produk_id', $produk->id)->value('jumlah');
+        $mutasiSebelum = MutasiStok::count();
+        $pengirimanSebelum = Pengiriman::count();
+        $auditSebelum = AuditLog::count();
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())->assertForbidden();
+        $this->postJson("/api/pesanan/{$id}/tandai-jalan")->assertForbidden();
+        $this->postJson("/api/pesanan/{$id}/proses")->assertNotFound();
+        $this->postJson("/api/pesanan/{$id}/kirim", $this->dataPengiriman())->assertNotFound();
+
+        $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'dikonfirmasi']);
+        $this->assertSame($stokSebelum, (int) StokProduk::where('produk_id', $produk->id)->value('jumlah'));
+        $this->assertSame($mutasiSebelum, MutasiStok::count());
+        $this->assertSame($pengirimanSebelum, Pengiriman::count());
+        $this->assertSame($auditSebelum, AuditLog::count());
+    }
+
+    public function test_catat_pengiriman_memerlukan_data_pengemudi_terstruktur(): void
+    {
+        $retail = $this->buatRetail();
+        $produk = $this->buatProduk(10);
+        $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 1]]);
+        $this->sebagai(Peran::Sales);
+        $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
+        $this->sebagai(Peran::Admin);
+
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", [
+            'nama_pengemudi' => '',
+            'telepon_pengemudi' => '',
+            'nomor_kendaraan' => '',
+        ])->assertUnprocessable()->assertJsonValidationErrors([
+            'nama_pengemudi', 'telepon_pengemudi', 'nomor_kendaraan',
+        ]);
+    }
+
+    public function test_catat_pengiriman_hanya_dapat_dilakukan_setelah_sales_menyetujui(): void
+    {
+        foreach (['menunggu_konfirmasi_sales', 'ditolak', 'dibatalkan'] as $status) {
+            $retail = $this->buatRetail("retail-{$status}@toko.test", "Toko {$status}");
+            $produk = $this->buatProduk(25);
+            $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 1]]);
+
+            if ($status === 'ditolak') {
+                $this->sebagai(Peran::Sales);
+                $this->postJson("/api/pesanan/{$id}/tolak", ['alasan' => 'Ditolak test'])->assertOk();
+            } elseif ($status === 'dibatalkan') {
+                Sanctum::actingAs($retail);
+                $this->postJson("/api/pesanan/{$id}/batalkan", ['alasan' => 'Batal test'])->assertOk();
+            }
+
+            $this->sebagai(Peran::Admin);
+            $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())
+                ->assertStatus(409)
+                ->assertJsonPath('kode', 'STATUS_PESANAN_TIDAK_VALID');
+            $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => $status]);
+            $this->assertSame(0, Pengiriman::where('pesanan_id', $id)->count());
+        }
+    }
+
+    public function test_catat_pengiriman_ditolak_jika_stok_tidak_cukup_tanpa_perubahan_data(): void
     {
         $retail = $this->buatRetail();
         $produk = $this->buatProduk(10);
         $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 5]]);
-
         $this->sebagai(Peran::Sales);
         $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
-
-        // Stok berkurang setelah pesanan dibuat (mis. dipakai pesanan lain).
         StokProduk::where('produk_id', $produk->id)->update(['jumlah' => 2]);
+        $this->sebagai(Peran::Admin);
 
-        $this->sebagai(Peran::Warehouse);
-        $this->postJson("/api/pesanan/{$id}/kirim", [])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors(['stok']);
-
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())
+            ->assertUnprocessable()->assertJsonValidationErrors(['stok']);
         $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'dikonfirmasi']);
         $this->assertDatabaseHas('stok_produk', ['produk_id' => $produk->id, 'jumlah' => 2]);
         $this->assertDatabaseCount('pengiriman', 0);
         $this->assertDatabaseCount('mutasi_stok', 0);
     }
 
-    public function test_estimasi_tiba_tidak_boleh_sebelum_tanggal_kirim(): void
+    public function test_gagal_mencatat_audit_membatalkan_seluruh_transaksi_pengiriman(): void
     {
         $retail = $this->buatRetail();
-        $produk = $this->buatProduk(100);
-        $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 1]]);
-
+        $produk = $this->buatProduk(10);
+        $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 3]]);
         $this->sebagai(Peran::Sales);
         $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
+        $admin = $this->sebagai(Peran::Admin);
+        $jumlahAuditSebelum = AuditLog::count();
 
-        $this->sebagai(Peran::Warehouse);
-        $this->postJson("/api/pesanan/{$id}/kirim", [
-            'tanggal_kirim' => now()->toDateString(),
-            'estimasi_tiba' => now()->subDay()->toDateString(),
-        ])
-            ->assertStatus(422)
-            ->assertJsonValidationErrors(['estimasi_tiba']);
+        DB::statement("CREATE TEMP TRIGGER gagal_sisip_audit BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT, 'audit gagal'); END");
+        $gagal = false;
+        try {
+            app(\App\Services\PesananService::class)->catatPengiriman(
+                Pesanan::findOrFail($id),
+                $this->dataPengiriman(),
+                $admin,
+            );
+        } catch (\Throwable) {
+            $gagal = true;
+        } finally {
+            DB::statement('DROP TRIGGER IF EXISTS gagal_sisip_audit');
+        }
+
+        $this->assertTrue($gagal, 'Kegagalan insert audit harus menggagalkan aksi pengiriman.');
+        $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'dikonfirmasi']);
+        $this->assertDatabaseHas('stok_produk', ['produk_id' => $produk->id, 'jumlah' => 10]);
+        $this->assertDatabaseCount('pengiriman', 0);
+        $this->assertDatabaseCount('mutasi_stok', 0);
+        $this->assertSame($jumlahAuditSebelum, AuditLog::count());
     }
 
-    public function test_retail_dan_sales_tidak_boleh_mengirim(): void
+    public function test_tandai_jalan_memerlukan_pengiriman_dengan_status_kurir(): void
     {
         $retail = $this->buatRetail();
-        $produk = $this->buatProduk(100);
+        $produk = $this->buatProduk(10);
         $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 1]]);
-
-        Sanctum::actingAs($retail);
-        $this->postJson("/api/pesanan/{$id}/kirim", [])->assertForbidden();
-
         $this->sebagai(Peran::Sales);
-        $this->postJson("/api/pesanan/{$id}/kirim", [])->assertForbidden();
+        $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
+        $this->sebagai(Peran::Admin);
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())->assertOk();
+
+        Pengiriman::where('pesanan_id', $id)->update(['status' => 'jalan']);
+        $this->postJson("/api/pesanan/{$id}/tandai-jalan")
+            ->assertStatus(409)
+            ->assertJsonPath('kode', 'STATUS_PENGIRIMAN_TIDAK_VALID');
+        $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'diproses']);
     }
 
     // ------------------------------------------------------- Retail: terima
 
-    public function test_retail_mengonfirmasi_pesanan_diterima(): void
+    public function test_retail_hanya_dapat_menerima_pesanan_setelah_jalan(): void
     {
         $retail = $this->buatRetail();
         $produk = $this->buatProduk(100);
         $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 1]]);
-
-        // Belum dikirim: tidak bisa diterima.
         Sanctum::actingAs($retail);
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())
+            ->assertForbidden();
+        $this->postJson("/api/pesanan/{$id}/tandai-jalan")->assertForbidden();
         $this->postJson("/api/pesanan/{$id}/terima")->assertStatus(409);
 
         $this->sebagai(Peran::Sales);
         $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
-        $this->sebagai(Peran::Warehouse);
-        $this->postJson("/api/pesanan/{$id}/kirim", [])->assertOk();
+        $admin = $this->sebagai(Peran::Admin);
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())->assertOk();
+        Sanctum::actingAs($retail);
+        $this->postJson("/api/pesanan/{$id}/terima")->assertStatus(409);
+        $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'diproses']);
+        $this->assertDatabaseHas('pengiriman', ['pesanan_id' => $id, 'status' => 'kurir']);
 
-        // Hanya Retail yang boleh mengonfirmasi (BR-10).
-        $this->postJson("/api/pesanan/{$id}/terima")->assertForbidden();
-
+        Sanctum::actingAs($admin);
+        $this->postJson("/api/pesanan/{$id}/tandai-jalan")->assertOk();
         Sanctum::actingAs($retail);
         $this->postJson("/api/pesanan/{$id}/terima")
             ->assertOk()
             ->assertJsonPath('data.status', 'diterima')
             ->assertJsonPath('data.pengiriman.status', 'diterima');
 
-        $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'diterima', 'diterima_oleh' => $retail->id]);
-        $this->assertDatabaseHas('pengiriman', ['pesanan_id' => $id, 'status' => 'diterima']);
+        $this->assertDatabaseHas('pesanan', [
+            'id' => $id,
+            'status' => 'diterima',
+            'diterima_oleh' => $retail->id,
+        ]);
+        $this->assertDatabaseHas('pengiriman', [
+            'pesanan_id' => $id,
+            'status' => 'diterima',
+            'diperbarui_oleh' => $retail->id,
+        ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'auditable_type' => Pesanan::class,
+            'auditable_id' => $id,
+            'aksi' => 'pesanan_diterima',
+            'user_id' => $retail->id,
+        ]);
+        $auditTerima = AuditLog::where('aksi', 'pesanan_diterima')->firstOrFail();
+        $this->assertNotNull($auditTerima->created_at);
+        $this->assertSame($retail->id, $auditTerima->user_id);
+        $this->assertSame($id, $auditTerima->meta['pesanan_id']);
+        $this->assertSame(
+            Pengiriman::where('pesanan_id', $id)->value('id'),
+            $auditTerima->meta['pengiriman_id'],
+        );
+        $this->assertSame('jalan', $auditTerima->meta['status_pengiriman_dari']);
+        $this->assertSame('diterima', $auditTerima->meta['status_pengiriman_ke']);
     }
 
-    // ------------------------------------------------------- Alur lengkap
+    public function test_retail_lain_tidak_dapat_mengonfirmasi_pesanan(): void
+    {
+        $retail = $this->buatRetail();
+        $retailLain = $this->buatRetail('retail-lain@toko.test', 'Toko B');
+        $produk = $this->buatProduk(20);
+        $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 1]]);
+        $this->sebagai(Peran::Sales);
+        $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
+        $this->sebagai(Peran::Admin);
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())->assertOk();
+        $this->postJson("/api/pesanan/{$id}/tandai-jalan")->assertOk();
+
+        Sanctum::actingAs($retailLain);
+        $this->postJson("/api/pesanan/{$id}/terima")->assertNotFound();
+        $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'dikirim']);
+    }
+
+    public function test_endpoint_lama_tidak_dapat_membypass_alur_pengiriman_baru(): void
+    {
+        $retail = $this->buatRetail();
+        $produk = $this->buatProduk(20);
+        $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 1]]);
+        $this->sebagai(Peran::Sales);
+        $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
+        $this->sebagai(Peran::Admin);
+
+        $this->postJson("/api/pesanan/{$id}/proses")->assertNotFound();
+        $this->postJson("/api/pesanan/{$id}/kirim", $this->dataPengiriman())->assertNotFound();
+        $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'dikonfirmasi']);
+        $this->assertDatabaseCount('pengiriman', 0);
+        $this->assertDatabaseCount('mutasi_stok', 0);
+    }
 
     public function test_alur_lengkap_dari_pesan_sampai_diterima(): void
     {
         $retail = $this->buatRetail();
         $produk = $this->buatProduk(20, ['harga' => 25000]);
-
         $id = $this->pesan($retail, [['produk_id' => $produk->id, 'qty' => 6]]);
 
         $this->sebagai(Peran::Sales);
         $this->postJson("/api/pesanan/{$id}/setujui")->assertOk();
-
-        $this->sebagai(Peran::Warehouse);
-        $this->postJson("/api/pesanan/{$id}/proses")->assertOk();
-        $this->postJson("/api/pesanan/{$id}/kirim", ['catatan' => 'Kurir toko'])->assertOk();
+        $admin = $this->sebagai(Peran::Admin);
+        $this->postJson("/api/pesanan/{$id}/catat-pengiriman", $this->dataPengiriman())->assertOk();
+        $this->postJson("/api/pesanan/{$id}/tandai-jalan")->assertOk();
 
         Sanctum::actingAs($retail);
         $this->postJson("/api/pesanan/{$id}/terima")->assertOk();
 
         $this->assertDatabaseHas('pesanan', ['id' => $id, 'status' => 'diterima']);
         $this->assertDatabaseHas('stok_produk', ['produk_id' => $produk->id, 'jumlah' => 14]);
-
+        $this->assertDatabaseHas('pengiriman', ['pesanan_id' => $id, 'status' => 'diterima']);
+        $this->assertSame(1, Pengiriman::where('pesanan_id', $id)->count());
         $detail = $this->getJson("/api/pesanan/{$id}")->assertOk();
         $this->assertEquals(150000, $detail->json('data.total'));
+        $this->assertSame('Budi Santoso', $detail->json('data.pengiriman.nama_pengemudi'));
         $this->assertNotNull($detail->json('data.dikonfirmasi_at'));
         $this->assertNotNull($detail->json('data.diproses_at'));
         $this->assertNotNull($detail->json('data.dikirim_at'));
         $this->assertNotNull($detail->json('data.diterima_at'));
+        $this->assertTrue($admin->can('pengiriman.perbarui'));
     }
 }

@@ -7,7 +7,7 @@ use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AlasanPesananRequest;
 use App\Http\Requests\BuatPesananRequest;
-use App\Http\Requests\KirimPesananRequest;
+use App\Http\Requests\CatatPengirimanRequest;
 use App\Http\Resources\PesananResource;
 use App\Models\Pesanan;
 use App\Models\User;
@@ -22,7 +22,8 @@ use Illuminate\Validation\ValidationException;
  * Pesanan produk.
  *  - Retail    : membuat, melihat pesanan tokonya, membatalkan, menerima
  *  - Sales     : melihat semua pesanan, menyetujui / menolak
- *  - Warehouse / Admin : melihat semua pesanan, menyerahkan ke kurir, menandai dikirim
+ *  - Warehouse : melihat semua pesanan
+ *  - Admin     : melihat semua pesanan, memproses, mengatur pengiriman
  */
 class PesananController extends Controller
 {
@@ -53,6 +54,7 @@ class PesananController extends Controller
 
         $paginator = $this->batasiUntuk(Pesanan::query(), $request->user())
             ->with('retailer:id,kode,nama_toko')
+            ->with('pengiriman')
             ->withCount('items')
             ->when($status->isNotEmpty(), fn ($query) => $query->whereIn('status', $status->all()))
             ->when($data['q'] ?? null, function ($query, $q) {
@@ -108,20 +110,20 @@ class PesananController extends Controller
         return $this->success(new PesananResource($hasil), 'Pesanan ditolak.');
     }
 
-    /** POST /api/pesanan/{pesanan}/proses  (Warehouse/Admin: sudah bersama kurir) */
-    public function proses(Request $request, Pesanan $pesanan): JsonResponse
+    /** POST /api/pesanan/{pesanan}/catat-pengiriman (Admin: catat data dan serahkan ke kurir) */
+    public function catatPengiriman(CatatPengirimanRequest $request, Pesanan $pesanan): JsonResponse
     {
-        $hasil = $this->pesanan->proses($pesanan, $request->user());
+        $hasil = $this->pesanan->catatPengiriman($pesanan, $request->validated(), $request->user());
 
-        return $this->success(new PesananResource($hasil), 'Pesanan diserahkan ke kurir.');
+        return $this->success(new PesananResource($hasil), 'Pengiriman dicatat dan stok diperbarui.');
     }
 
-    /** POST /api/pesanan/{pesanan}/kirim  (Warehouse/Admin: dalam perjalanan) */
-    public function kirim(KirimPesananRequest $request, Pesanan $pesanan): JsonResponse
+    /** POST /api/pesanan/{pesanan}/tandai-jalan (Admin: kurir mengabarkan sudah berangkat) */
+    public function tandaiJalan(Request $request, Pesanan $pesanan): JsonResponse
     {
-        $hasil = $this->pesanan->kirim($pesanan, $request->validated(), $request->user());
+        $hasil = $this->pesanan->tandaiJalan($pesanan, $request->user());
 
-        return $this->success(new PesananResource($hasil), 'Pesanan ditandai dalam perjalanan. Stok diperbarui.');
+        return $this->success(new PesananResource($hasil), 'Pesanan ditandai sedang dalam perjalanan.');
     }
 
     /** POST /api/pesanan/{pesanan}/terima  (Retail) */

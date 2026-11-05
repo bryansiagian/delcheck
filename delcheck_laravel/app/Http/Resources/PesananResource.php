@@ -39,11 +39,14 @@ class PesananResource extends JsonResource
             ])->values()),
 
             'pengiriman' => $this->whenLoaded('pengiriman', function () {
-                $kirim = $this->pengiriman->sortByDesc('id')->first();
+                $kirim = $this->pengiriman;
 
                 return $kirim ? [
                     'id' => $kirim->id,
                     'nomor_surat_jalan' => $kirim->nomor_surat_jalan,
+                    'nama_pengemudi' => $kirim->nama_pengemudi,
+                    'telepon_pengemudi' => $kirim->telepon_pengemudi,
+                    'nomor_kendaraan' => $kirim->nomor_kendaraan,
                     'status' => $kirim->status,
                     'tanggal_kirim' => $kirim->tanggal_kirim?->toDateString(),
                     'estimasi_tiba' => $kirim->estimasi_tiba?->toDateString(),

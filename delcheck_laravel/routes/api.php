@@ -1,13 +1,14 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\PendaftaranRetailController;
+use App\Http\Controllers\Api\Admin\PenggunaController;
 use App\Http\Controllers\Api\Admin\SalesController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\PesananController;
 use App\Http\Controllers\Api\ProdukController;
+use App\Http\Controllers\Api\ReturController;
 use App\Http\Controllers\Api\StokController;
 use App\Http\Controllers\Api\WilayahController;
-use App\Http\Controllers\Api\Admin\PenggunaController;
 use Illuminate\Support\Facades\Route;
 
 // ---------------------------------------------------------------- publik
@@ -24,13 +25,23 @@ Route::prefix('auth')->group(function () {
 });
 
 // ----------------------------------------------------------------- admin
-Route::middleware(['auth:sanctum', 'permission:retailer.verifikasi'])
+// Endpoint pilihan Sales tetap bisa dipakai Admin pengguna dan Sales.
+Route::middleware(['auth:sanctum', 'permission:pengguna.kelola|retailer.verifikasi'])
     ->prefix('admin')
     ->group(function () {
         Route::get('sales', [SalesController::class, 'index']);
+    });
 
+Route::middleware(['auth:sanctum', 'permission:retailer.lihat-daftar'])
+    ->prefix('admin')
+    ->group(function () {
         Route::get('pendaftaran-retail', [PendaftaranRetailController::class, 'index']);
         Route::get('pendaftaran-retail/{retailer}', [PendaftaranRetailController::class, 'show']);
+    });
+
+Route::middleware(['auth:sanctum', 'permission:retailer.verifikasi'])
+    ->prefix('admin')
+    ->group(function () {
         Route::post('pendaftaran-retail/{retailer}/setujui', [PendaftaranRetailController::class, 'setujui']);
         Route::post('pendaftaran-retail/{retailer}/tolak', [PendaftaranRetailController::class, 'tolak']);
     });
@@ -81,13 +92,49 @@ Route::middleware('auth:sanctum')
         // Retail
         Route::post('/', [PesananController::class, 'store'])->middleware('permission:pesanan.buat');
         Route::post('{pesanan}/batalkan', [PesananController::class, 'batalkan'])->middleware('permission:pesanan.buat');
-        Route::post('{pesanan}/terima', [PesananController::class, 'terima'])->middleware('permission:pesanan.terima');
+        Route::post('{pesanan}/terima', [PesananController::class, 'terima'])
+            ->middleware(['role:retail', 'permission:pesanan.terima']);
 
         // Sales
         Route::post('{pesanan}/setujui', [PesananController::class, 'setujui'])->middleware('permission:pesanan.konfirmasi');
         Route::post('{pesanan}/tolak', [PesananController::class, 'tolak'])->middleware('permission:pesanan.konfirmasi');
 
-        // Warehouse / Admin
-        Route::post('{pesanan}/proses', [PesananController::class, 'proses'])->middleware('permission:pesanan.proses');
-        Route::post('{pesanan}/kirim', [PesananController::class, 'kirim'])->middleware('permission:pengiriman.perbarui');
+        // Admin saja; role guard juga mencegah akses dari permission langsung.
+        Route::post('{pesanan}/catat-pengiriman', [PesananController::class, 'catatPengiriman'])
+            ->middleware(['role:admin', 'permission:pesanan.proses']);
+        Route::post('{pesanan}/tandai-jalan', [PesananController::class, 'tandaiJalan'])
+            ->middleware(['role:admin', 'permission:pengiriman.perbarui']);
+    });
+
+// ------------------------------------------------------------------- Return
+Route::middleware([
+    'auth:sanctum',
+    'permission:retur.ajukan|retur.konfirmasi|pengiriman.perbarui|retur.pantau-logistik',
+])->prefix('retur')->group(function () {
+    Route::get('/', [ReturController::class, 'index']);
+    Route::get('{retur}', [ReturController::class, 'show']);
+    Route::get('{retur}/foto/{fotoBukti}', [ReturController::class, 'foto'])->name('api.retur.foto');
+});
+
+Route::middleware(['auth:sanctum', 'permission:retur.ajukan'])
+    ->prefix('retur')
+    ->group(function () {
+        Route::post('/', [ReturController::class, 'store']);
+        Route::put('{retur}', [ReturController::class, 'update']);
+        Route::delete('{retur}', [ReturController::class, 'destroy']);
+        Route::post('{retur}/ajukan', [ReturController::class, 'ajukan']);
+    });
+
+Route::middleware(['auth:sanctum', 'permission:retur.konfirmasi'])
+    ->prefix('retur')
+    ->group(function () {
+        Route::post('{retur}/setujui', [ReturController::class, 'setujui']);
+        Route::post('{retur}/tolak', [ReturController::class, 'tolak']);
+    });
+
+Route::middleware(['auth:sanctum', 'permission:pengiriman.perbarui|retur.pantau-logistik'])
+    ->prefix('retur')
+    ->group(function () {
+        Route::put('{retur}/jadwal-penjemputan', [ReturController::class, 'jadwalkan']);
+        Route::post('{retur}/bukti-penjemputan', [ReturController::class, 'unggahBukti']);
     });

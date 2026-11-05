@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/api_client.dart';
 import '../models/retailer_pendaftar.dart';
+import '../providers/auth_provider.dart';
 import '../services/admin_service.dart';
 
 /// Detail satu pendaftaran beserta aksi verifikasinya.
@@ -18,12 +19,13 @@ class AdminDetailRetailerScreen extends StatefulWidget {
 
 class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
   static const _blue = Color(0xFF2563EB);
-  static const _headerBlue = Color(0xFF1D4ED8);
-  static const _secondaryBlue = Color(0xFF3B82F6);
-  static const _background = Color(0xFFF1F5F9);
-  static const _text = Color(0xFF0F172A);
-  static const _muted = Color(0xFF64748B);
+  static const _headerBlue = Color(0xFF004AC6);
+  static const _background = Color(0xFFEFF4FF);
+  static const _text = Color(0xFF0B1C30);
+  static const _muted = Color(0xFF4D556B);
   static const _danger = Color(0xFFDC2626);
+  static const _warning = Color(0xFF9D4300);
+  static const _teal = Color(0xFF0D9488);
 
   late final AdminService _service;
   late RetailerPendaftar _retailer;
@@ -86,7 +88,7 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
       navigator.pop(true);
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
-      // Jika admin lain lebih dulu memproses pendaftaran, sinkronkan daftar.
+      // Jika petugas lain lebih dulu memproses pendaftaran, sinkronkan daftar.
       if (e.kode == 'PENDAFTARAN_SUDAH_DIPROSES') navigator.pop(true);
     } finally {
       if (mounted) setState(() => _bekerja = false);
@@ -129,20 +131,32 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
   };
 
   Color get _statusColor => switch (r.status) {
-    'disetujui' => const Color(0xFF16A34A),
-    'ditolak' => _danger,
-    _ => const Color(0xFFF97316),
+    'disetujui' => _teal,
+    'ditolak' => const Color(0xFFBA1A1A),
+    _ => _warning,
   };
 
   Color get _statusBackground => switch (r.status) {
-    'disetujui' => const Color(0xFFDCFCE7),
-    'ditolak' => const Color(0xFFFEE2E2),
-    _ => const Color(0xFFFFEDD5),
+    'disetujui' => const Color(0xFFCCFBF1),
+    'ditolak' => const Color(0xFFFFDAD6),
+    _ => const Color(0xFFFFDBCA),
   };
 
   @override
   Widget build(BuildContext context) {
-    final showActions = r.bisaDisetujui;
+    final user = context.watch<AuthProvider>().user;
+    final isSales = user?.punyaPeran('sales') ?? false;
+    final isAdmin = user?.punyaPeran('admin') ?? false;
+    if (!isSales || isAdmin) {
+      return Scaffold(
+        backgroundColor: _background,
+        appBar: AppBar(title: const Text('Akses dibatasi')),
+        body: const Center(
+          child: Text('Halaman ini hanya dapat diakses oleh Sales.'),
+        ),
+      );
+    }
+    final showActions = isSales && !isAdmin && r.bisaDisetujui;
 
     return Scaffold(
       backgroundColor: _background,
@@ -150,208 +164,196 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
         padding: EdgeInsets.zero,
         children: [
           _header(context),
-          Transform.translate(
-            offset: const Offset(0, -40),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: _profilCard(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            child: Column(
+              children: [
+                _profilCard(),
+                const SizedBox(height: 16),
+                _isiDetail(),
+                if (r.alasanDitolak != null && r.alasanDitolak!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _kartu(
+                    title: 'Alasan penolakan',
+                    children: [
+                      _barisInfo(
+                        Icons.info_outline_rounded,
+                        'Catatan',
+                        r.alasanDitolak!,
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
-          Transform.translate(
-            offset: const Offset(0, -40),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: _isiDetail(),
-            ),
-          ),
-          if (r.alasanDitolak != null && r.alasanDitolak!.isNotEmpty)
-            Transform.translate(
-              offset: const Offset(0, -40),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                child: _kartu(
-                  title: 'Alasan penolakan',
-                  children: [
-                    _barisInfo(
-                      Icons.info_outline_rounded,
-                      'Catatan',
-                      r.alasanDitolak!,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          const SizedBox(height: 8),
         ],
       ),
       bottomNavigationBar: showActions ? _actionBar() : null,
     );
   }
 
-  
   Widget _header(BuildContext context) => Container(
     padding: EdgeInsets.fromLTRB(
+      16,
+      MediaQuery.paddingOf(context).top + 20,
+      16,
       20,
-      MediaQuery.paddingOf(context).top + 10,
-      20,
-      76,
     ),
     decoration: const BoxDecoration(
       gradient: LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          _headerBlue,
-          _secondaryBlue,
-        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [_headerBlue, _blue],
       ),
-      borderRadius: BorderRadius.vertical(
-        bottom: Radius.circular(32),
-      ),
+      borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
+      boxShadow: [
+        BoxShadow(
+          color: Color(0x29004AC6),
+          blurRadius: 16,
+          offset: Offset(0, 4),
+        ),
+      ],
     ),
-    child: Stack(
-      clipBehavior: Clip.none,
+    child: Row(
       children: [
-        // Lingkaran dekorasi kanan atas
-        Positioned(
-          top: -70,
-          right: -48,
+        InkWell(
+          onTap: () => Navigator.maybePop(context),
+          borderRadius: BorderRadius.circular(24),
           child: Container(
-            width: 176,
-            height: 176,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.08),
+              color: Colors.white.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
+            child: const Icon(Icons.arrow_back, color: Colors.white, size: 22),
           ),
         ),
-
-        // Lingkaran dekorasi kiri
-        Positioned(
-          top: 36,
-          left: 28,
-          child: Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
-              shape: BoxShape.circle,
+        const SizedBox(width: 14),
+        const Expanded(
+          child: Text(
+            'Detail Pendaftaran',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
             ),
           ),
-        ),
-
-        // Tombol kembali dan judul
-        Row(
-          children: [
-            Material(
-              color: Colors.white.withValues(alpha: 0.18),
-              shape: const CircleBorder(),
-              child: IconButton(
-                tooltip: 'Kembali',
-                onPressed: () => Navigator.maybePop(context),
-                icon: const Icon(
-                  Icons.arrow_back_rounded,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Detail Pendaftaran',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ),
-          ],
         ),
       ],
     ),
   );
 
-
   Widget _profilCard() => Container(
-    width: double.infinity,
     padding: const EdgeInsets.all(20),
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(24),
       boxShadow: [
         BoxShadow(
-          color: Colors.black.withValues(alpha: 0.06),
-          blurRadius: 30,
-          offset: const Offset(0, 8),
+          color: Colors.black.withValues(alpha: 0.04),
+          blurRadius: 10,
+          offset: const Offset(0, 3),
         ),
       ],
     ),
     child: Column(
       children: [
-        Container(
-          width: 72,
-          height: 72,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0xFFDBEAFE),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            _inisial(r.namaToko),
-            style: const TextStyle(
-              color: _blue,
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD3E4FE),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                _inisial(r.namaToko),
+                style: const TextStyle(
+                  color: _blue,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          r.namaToko,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: _text,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: _statusBackground,
-            borderRadius: BorderRadius.circular(30),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  color: _statusColor,
-                  shape: BoxShape.circle,
-                ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    r.namaToko,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: _text,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    r.kode,
+                    style: const TextStyle(
+                      color: _muted,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _statusBackground,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: BoxDecoration(
+                            color: _statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _statusLabel,
+                          style: TextStyle(
+                            color: _statusColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 7),
-              Text(
-                _statusLabel,
-                style: TextStyle(
-                  color: _statusColor,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          _tanggal(r.dibuat),
-          textAlign: TextAlign.center,
-          style: const TextStyle(color: _muted, fontSize: 12),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            const Icon(Icons.schedule_rounded, size: 15, color: _muted),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                _tanggal(r.dibuat),
+                style: const TextStyle(color: _muted, fontSize: 12),
+              ),
+            ),
+          ],
         ),
       ],
     ),
@@ -400,9 +402,9 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.04),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -430,7 +432,7 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: const Color(0xFFDBEAFE),
+          color: const Color(0xFFD3E4FE),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Icon(icon, color: _blue, size: 20),
@@ -462,7 +464,7 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
 
   Widget _pemisah() => const Padding(
     padding: EdgeInsets.symmetric(vertical: 14),
-    child: Divider(height: 1, color: Color(0xFFF1F5F9)),
+    child: Divider(height: 1, color: Color(0xFFE5EEFF)),
   );
 
   Widget _actionBar() => SafeArea(
@@ -491,7 +493,7 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: _danger,
                   side: const BorderSide(color: _danger, width: 1.5),
-                  minimumSize: const Size(0, 52),
+                  minimumSize: const Size(0, 50),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
                   ),
@@ -519,9 +521,9 @@ class _AdminDetailRetailerScreenState extends State<AdminDetailRetailerScreen> {
               label: Text(r.ditolak ? 'Setujui ulang' : 'Setujui'),
               style: FilledButton.styleFrom(
                 backgroundColor: _blue,
-                elevation: 4,
+                elevation: 2,
                 shadowColor: _blue.withValues(alpha: 0.35),
-                minimumSize: const Size(0, 52),
+                minimumSize: const Size(0, 50),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),

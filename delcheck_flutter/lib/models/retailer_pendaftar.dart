@@ -3,7 +3,7 @@ String? _s(dynamic v) {
   return (t == null || t.isEmpty || t == 'null') ? null : t;
 }
 
-/// Data pendaftaran toko (Retailer) untuk halaman verifikasi admin.
+/// Data pendaftaran toko (Retailer) untuk daftar dan detail verifikasi.
 /// Parser dibuat toleran terhadap beberapa kemungkinan nama field.
 class RetailerPendaftar {
   final int id;
@@ -83,8 +83,8 @@ class SalesUser {
   const SalesUser({required this.id, required this.nama, this.kontak});
 
   factory SalesUser.fromJson(Map<String, dynamic> j) => SalesUser(
-        id: j['id'] is num ? (j['id'] as num).toInt() : int.parse('${j['id']}'),
-        nama: _s(j['name']) ?? _s(j['nama']) ?? _s(j['email']) ?? 'Sales',
-        kontak: _s(j['email']) ?? _s(j['phone']),
-      );
+    id: j['id'] is num ? (j['id'] as num).toInt() : int.parse('${j['id']}'),
+    nama: _s(j['name']) ?? _s(j['nama']) ?? _s(j['email']) ?? 'Sales',
+    kontak: _s(j['email']) ?? _s(j['phone']),
+  );
 }

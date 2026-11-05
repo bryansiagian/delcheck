@@ -12,6 +12,9 @@ class Pengiriman extends Model
     protected $fillable = [
         'pesanan_id',
         'nomor_surat_jalan',
+        'nama_pengemudi',
+        'telepon_pengemudi',
+        'nomor_kendaraan',
         'status',
         'tanggal_kirim',
         'estimasi_tiba',

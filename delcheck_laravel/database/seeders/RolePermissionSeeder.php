@@ -50,6 +50,8 @@ class RolePermissionSeeder extends Seeder
                 'retur.konfirmasi',              // UC-S03
                 'laporan-barang.lihat-binaan',   // UC-S04
                 'profil-toko.lihat-binaan',      // UC-S05
+                'retailer.lihat-daftar',         // melihat pendaftaran dan status verifikasi
+                'retailer.verifikasi',           // menyetujui/menolak pendaftaran Retail
                 'kunjungan.kelola',              // UC-S06 (BR-09: milik sendiri)
                 'kinerja.lihat',                 // UC-S07 (BR-09: milik sendiri)
             ],
@@ -64,8 +66,6 @@ class RolePermissionSeeder extends Seeder
                 'pesanan.proses',                // UC-A01 (BR-10)
                 'pengiriman.pantau',
                 'pengiriman.perbarui',           // UC-A02 (Dikirim, BR-10)
-                'retailer.lihat-daftar',         // UC-A05
-                'retailer.verifikasi',           // UC-A07 (baru): setujui/tolak pendaftaran Retail
                 'pengguna.kelola',               // UC-A08 (baru): aktifkan/nonaktifkan akun pengguna
                 'ulasan.lihat',                  // UC-A06
             ],
@@ -77,9 +77,7 @@ class RolePermissionSeeder extends Seeder
                 'produk.kelola',                 // tambah/ubah/hapus produk
                 'stok.kelola',                   // tambah/kurangi stok
                 'pesanan.lihat-semua',           // pesanan yang perlu dikirim
-                'pesanan.proses',                // serahkan ke kurir
                 'pengiriman.pantau',
-                'pengiriman.perbarui',           // tandai dalam perjalanan
                 'analitik.sebaran-retail',       // UC-W01
                 'analitik.akar-masalah',         // UC-W02
                 'klaim.putuskan',                // UC-W03 (BR-03: hanya Warehouse)
@@ -107,7 +105,19 @@ class RolePermissionSeeder extends Seeder
 
         // 2. Buat peran dan sinkronkan izinnya (idempoten)
         foreach ($peta as $namaPeran => $izin) {
-            Role::findOrCreate($namaPeran, self::GUARD)->syncPermissions($izin);
+            $role = Role::findOrCreate($namaPeran, self::GUARD);
+            $izinLain = $role->permissions()
+                ->whereNotIn('name', [
+                    'retailer.lihat-daftar',
+                    'retailer.verifikasi',
+                    'pesanan.proses',
+                    'pengiriman.perbarui',
+                ])
+                ->pluck('permissions.name')
+                ->all();
+
+            // Izin yang dipindahkan disinkronkan dari peta; izin lain dipertahankan.
+            $role->syncPermissions(array_values(array_unique([...$izin, ...$izinLain])));
         }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();

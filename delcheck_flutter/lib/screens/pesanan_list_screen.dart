@@ -7,7 +7,9 @@ import '../widgets/catat_pengiriman_bottom_sheet.dart';
 import '../core/api_client.dart';
 import '../core/format.dart';
 import '../models/pesanan.dart';
+import '../providers/auth_provider.dart';
 import '../services/pesanan_service.dart';
+import '../widgets/status_pesanan_chip.dart';
 import 'buat_pesanan_screen.dart';
 import 'pesanan_detail_screen.dart';
 
@@ -28,12 +30,18 @@ class PesananListScreen extends StatefulWidget {
     required this.filter,
     this.tampilkanToko = false,
     this.bisaBuat = false,
+    this.tampilanRetail = false,
+    this.tampilanSales = false,
+    this.tampilanWarehouse = false,
   });
 
   final String judul;
   final List<PesananFilter> filter;
   final bool tampilkanToko;
   final bool bisaBuat;
+  final bool tampilanRetail;
+  final bool tampilanSales;
+  final bool tampilanWarehouse;
 
   @override
   State<PesananListScreen> createState() => _PesananListScreenState();
@@ -117,8 +125,11 @@ class _PesananListScreenState extends State<PesananListScreen> {
     final id = _reqId;
     setState(() => _memuatLagi = true);
     try {
-      final h =
-          await _service.daftar(status: _status, q: _q, halaman: _halaman + 1);
+      final h = await _service.daftar(
+        status: _status,
+        q: _q,
+        halaman: _halaman + 1,
+      );
       if (!mounted || id != _reqId) return;
       setState(() {
         _items.addAll(h.items);
@@ -127,8 +138,9 @@ class _PesananListScreenState extends State<PesananListScreen> {
       });
     } on ApiException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } finally {
       if (mounted) setState(() => _memuatLagi = false);
@@ -224,8 +236,11 @@ class _PesananListScreenState extends State<PesananListScreen> {
                           color: Colors.white.withOpacity(0.2),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.arrow_back,
-                            color: Colors.white, size: 22),
+                        child: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -240,9 +255,13 @@ class _PesananListScreenState extends State<PesananListScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const Text(
-                          'Pantau dan catat pengiriman pesanan',
-                          style: TextStyle(
+                        Text(
+                          widget.tampilanSales
+                              ? 'Tinjau pesanan Retail yang menunggu keputusan'
+                              : widget.tampilanRetail
+                              ? 'Pantau pesanan dan riwayat transaksi'
+                              : 'Pantau dan catat pengiriman pesanan',
+                          style: const TextStyle(
                             color: Color(0xFFDBEAFE),
                             fontSize: 12,
                           ),
@@ -273,11 +292,18 @@ class _PesananListScreenState extends State<PesananListScreen> {
                       _onCari(v);
                     },
                     decoration: InputDecoration(
-                      hintText: 'Cari nomor pesanan atau nama toko',
-                      hintStyle:
-                          const TextStyle(color: _textMuted, fontSize: 13),
-                      prefixIcon: const Icon(Icons.search,
-                          color: _textMuted, size: 22),
+                      hintText: widget.tampilanRetail
+                          ? 'Cari nomor pesanan'
+                          : 'Cari nomor pesanan atau nama toko',
+                      hintStyle: const TextStyle(
+                        color: _textMuted,
+                        fontSize: 13,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: _textMuted,
+                        size: 22,
+                      ),
                       suffixIcon: _cariCtrl.text.isEmpty
                           ? null
                           : IconButton(
@@ -289,8 +315,7 @@ class _PesananListScreenState extends State<PesananListScreen> {
                               },
                             ),
                       border: InputBorder.none,
-                      contentPadding:
-                          const EdgeInsets.symmetric(vertical: 14),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                   ),
                 ),
@@ -433,7 +458,9 @@ class _PesananListScreenState extends State<PesananListScreen> {
             Text(_error!, style: const TextStyle(color: _textMuted)),
             const SizedBox(height: 16),
             ElevatedButton(
-                onPressed: _muatAwal, child: const Text('Coba Lagi')),
+              onPressed: _muatAwal,
+              child: const Text('Coba Lagi'),
+            ),
           ],
         ),
       );
@@ -444,17 +471,27 @@ class _PesananListScreenState extends State<PesananListScreen> {
         color: _primary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          children: const [
-            SizedBox(height: 80),
+          children: [
+            const SizedBox(height: 80),
             Center(
               child: Column(
                 children: [
-                  Icon(Icons.inbox_rounded, size: 54, color: Color(0xFFCBD5E1)),
-                  SizedBox(height: 12),
+                  const Icon(
+                    Icons.inbox_rounded,
+                    size: 54,
+                    color: Color(0xFFCBD5E1),
+                  ),
+                  const SizedBox(height: 12),
                   Text(
-                    'Tidak ada pengiriman pada filter ini',
+                    widget.tampilanSales
+                        ? 'Tidak ada pesanan yang menunggu konfirmasi'
+                        : widget.tampilanRetail
+                        ? 'Tidak ada pesanan pada kategori ini'
+                        : 'Tidak ada pengiriman pada filter ini',
                     style: TextStyle(
-                        color: _textMuted, fontWeight: FontWeight.w500),
+                      color: _textMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
@@ -477,13 +514,120 @@ class _PesananListScreenState extends State<PesananListScreen> {
           if (i >= _items.length) {
             return const Padding(
               padding: EdgeInsets.all(16),
-              child: Center(
-                  child: CircularProgressIndicator(strokeWidth: 2.5)),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
             );
           }
           final p = _items[i];
-          return _buildPengirimanCard(p);
+          return widget.tampilanRetail ||
+                  widget.tampilanSales ||
+                  widget.tampilanWarehouse
+              ? _buildKartuPesanan(p)
+              : _buildPengirimanCard(p);
         },
+      ),
+    );
+  }
+
+  Widget _buildKartuPesanan(Pesanan p) {
+    return Card(
+      color: Colors.white,
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: InkWell(
+        onTap: () => _buka(p),
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '#${p.nomor}',
+                          style: const TextStyle(
+                            color: _textDark,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          p.dibuat == null
+                              ? 'Tanggal tidak tersedia'
+                              : formatTanggalJam(p.dibuat!),
+                          style: const TextStyle(
+                            color: _textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (widget.tampilanSales && p.tokoNama != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            p.tokoNama!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: _textDark,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  StatusPesananChip(status: p.status),
+                ],
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Divider(height: 1, color: Color(0xFFE2E8F0)),
+              ),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.inventory_2_outlined,
+                    size: 17,
+                    color: _textMuted,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${p.jumlahItem} item',
+                    style: const TextStyle(color: _textMuted, fontSize: 13),
+                  ),
+                  const Spacer(),
+                  Text(
+                    formatRupiah(p.total),
+                    style: const TextStyle(
+                      color: _textDark,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  'Lihat detail  ›',
+                  style: TextStyle(
+                    color: _primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -492,32 +636,89 @@ class _PesananListScreenState extends State<PesananListScreen> {
   Widget _buildPengirimanCard(Pesanan p) {
     final statusNorm = p.status.toLowerCase();
 
-    // Status Styling Data
-    Color statusBg = const Color(0xFFFFEDD5);
-    Color statusColor = const Color(0xFFF97316);
-    IconData statusIcon = Icons.inventory_2_rounded;
-    String statusText = 'Siap dikirim';
-    int stepActive = 1; // 1: Siap, 2: Kurir, 3: Jalan, 4: Diterima
+    Color statusBg = const Color(0xFFF1F5F9);
+    Color statusColor = const Color(0xFF475569);
+    IconData statusIcon = Icons.info_outline_rounded;
+    String statusText = p.statusLabel;
+    String statusInfo = 'Status pesanan: ${p.statusLabel}.';
+    int? stepActive;
 
-    if (statusNorm == 'diproses') {
-      statusBg = const Color(0xFFE0E7FF);
-      statusColor = const Color(0xFF4F46E5);
-      statusIcon = Icons.person_pin_circle_rounded;
-      statusText = 'Bersama kurir';
-      stepActive = 2;
-    } else if (statusNorm == 'dikirim') {
-      statusBg = const Color(0xFFDBEAFE);
-      statusColor = _primary;
-      statusIcon = Icons.local_shipping_rounded;
-      statusText = 'Dalam perjalanan';
-      stepActive = 3;
-    } else if (statusNorm == 'diterima' || statusNorm == 'selesai') {
-      statusBg = const Color(0xFFCCFBF1);
-      statusColor = const Color(0xFF0D9488);
-      statusIcon = Icons.check_circle_rounded;
-      statusText = 'Diterima';
-      stepActive = 4;
+    switch (statusNorm) {
+      case 'menunggu_konfirmasi_sales':
+        statusBg = const Color(0xFFFFEDD5);
+        statusColor = const Color(0xFFC2410C);
+        statusIcon = Icons.hourglass_top_rounded;
+        statusText = 'Menunggu konfirmasi Sales';
+        statusInfo =
+            'Pesanan ini belum dapat diproses untuk pengiriman. Silakan menunggu konfirmasi dari Sales.';
+        break;
+      case 'ditolak':
+        statusBg = const Color(0xFFFEE2E2);
+        statusColor = const Color(0xFFB91C1C);
+        statusIcon = Icons.cancel_outlined;
+        statusText = 'Ditolak oleh Sales';
+        statusInfo = 'Pesanan ditolak oleh Sales dan tidak dapat dikirim.';
+        break;
+      case 'dibatalkan':
+        statusBg = const Color(0xFFF1F5F9);
+        statusColor = const Color(0xFF64748B);
+        statusIcon = Icons.block_outlined;
+        statusText = 'Pesanan dibatalkan';
+        statusInfo = 'Pesanan dibatalkan dan tidak dapat dikirim.';
+        break;
+      case 'dikonfirmasi':
+        statusBg = const Color(0xFFFFEDD5);
+        statusColor = const Color(0xFFF97316);
+        statusIcon = Icons.inventory_2_rounded;
+        statusText = 'Siap dikirim';
+        statusInfo = 'Pesanan telah dikonfirmasi Sales dan siap dikirim.';
+        stepActive = 1;
+        break;
+      case 'diproses':
+        statusBg = const Color(0xFFE0E7FF);
+        statusColor = const Color(0xFF4F46E5);
+        statusIcon = Icons.person_pin_circle_rounded;
+        statusText = p.pengiriman?.status == 'kurir'
+            ? 'Kurir'
+            : 'Pengiriman belum dicatat';
+        statusInfo = p.pengiriman?.status == 'kurir'
+            ? 'Pengiriman sudah dicatat dan stok telah diperbarui.'
+            : 'Pesanan ini belum memiliki data pengiriman.';
+        if (p.pengiriman?.status == 'kurir') stepActive = 2;
+        break;
+      case 'dikirim':
+        statusBg = const Color(0xFFDBEAFE);
+        statusColor = _primary;
+        statusIcon = Icons.local_shipping_rounded;
+        statusText = p.pengiriman?.status == 'jalan'
+            ? 'Dalam perjalanan'
+            : 'Status pengiriman perlu diperiksa';
+        statusInfo = p.pengiriman?.status == 'jalan'
+            ? 'Kurir telah berangkat dan pesanan sedang dikirim.'
+            : 'Status pesanan dan pengiriman tidak sesuai.';
+        if (p.pengiriman?.status == 'jalan') stepActive = 3;
+        break;
+      case 'diterima':
+      case 'selesai':
+        statusBg = const Color(0xFFCCFBF1);
+        statusColor = const Color(0xFF0D9488);
+        statusIcon = Icons.check_circle_rounded;
+        statusText = p.pengiriman?.status == 'diterima'
+            ? 'Diterima'
+            : 'Status pengiriman perlu diperiksa';
+        statusInfo = p.pengiriman?.status == 'diterima'
+            ? 'Pesanan telah diterima.'
+            : 'Status pesanan dan pengiriman tidak sesuai.';
+        if (p.pengiriman?.status == 'diterima') stepActive = 4;
+        break;
     }
+
+    final isAdmin =
+        context.read<AuthProvider>().user?.punyaPeran('admin') ?? false;
+    final bisaCatatPengiriman =
+        isAdmin && statusNorm == 'dikonfirmasi' && p.pengiriman == null;
+    final bisaTandaiJalan =
+        isAdmin && statusNorm == 'diproses' && p.pengiriman?.status == 'kurir';
 
     final namaToko = p.tokoNama ?? 'Retail Store';
     final inisial = _ambilInisial(namaToko);
@@ -560,8 +761,10 @@ class _PesananListScreenState extends State<PesananListScreen> {
                 ],
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: statusBg,
                   borderRadius: BorderRadius.circular(20),
@@ -633,16 +836,17 @@ class _PesananListScreenState extends State<PesananListScreen> {
           Container(
             padding: const EdgeInsets.symmetric(vertical: 8),
             decoration: const BoxDecoration(
-              border: Border(
-                top: BorderSide(color: Color(0xFFF1F5F9)),
-              ),
+              border: Border(top: BorderSide(color: Color(0xFFF1F5F9))),
             ),
             child: Row(
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.inventory_2_outlined,
-                        size: 15, color: _textMuted),
+                    const Icon(
+                      Icons.inventory_2_outlined,
+                      size: 15,
+                      color: _textMuted,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       '${p.jumlahItem} item',
@@ -653,8 +857,11 @@ class _PesananListScreenState extends State<PesananListScreen> {
                 const SizedBox(width: 18),
                 Row(
                   children: [
-                    const Icon(Icons.account_balance_wallet_outlined,
-                        size: 15, color: _textMuted),
+                    const Icon(
+                      Icons.account_balance_wallet_outlined,
+                      size: 15,
+                      color: _textMuted,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       formatRupiah(p.total),
@@ -671,32 +878,77 @@ class _PesananListScreenState extends State<PesananListScreen> {
           ),
           const SizedBox(height: 8),
 
-          // 4. Mini Progress Tracker 4 Tahap
-          _buildProgressTracker(stepActive, statusColor),
-          const SizedBox(height: 14),
+          if (stepActive != null) ...[
+            // 4. Mini Progress Tracker 4 Tahap
+            _buildProgressTracker(stepActive, statusColor),
+            const SizedBox(height: 14),
+          ],
 
-// 5. Tombol Aksi Sesuai Status
-          if (stepActive == 1) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: statusBg.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(statusIcon, color: statusColor, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    statusInfo,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 12,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // 5. Tombol Aksi Sesuai Status
+          if (bisaCatatPengiriman || bisaTandaiJalan) ...[
             SizedBox(
               width: double.infinity,
               height: 46,
               child: ElevatedButton.icon(
-                onPressed: () {
-                  CatatPengirimanBottomSheet.show(
-                    context: context,
-                    pesanan: p,
-                    onSubmit: (data) async {
-                      await _service.kirim(p.id, data);
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Pengiriman berhasil dicatat!')),
+                onPressed: bisaCatatPengiriman
+                    ? () {
+                        CatatPengirimanBottomSheet.show(
+                          context: context,
+                          pesanan: p,
+                          onSubmit: (data) async {
+                            try {
+                              await _service.catatPengiriman(p.id, data);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Pengiriman dicatat dan stok diperbarui.',
+                                    ),
+                                  ),
+                                );
+                                _muatAwal();
+                              }
+                              return true;
+                            } on ApiException catch (error) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text(error.message)),
+                                );
+                              }
+                              return false;
+                            }
+                          },
                         );
-                        _muatAwal(); // segarkan daftar otomatis
                       }
-                    },
-                  );
-                },
+                    : () => _tandaiJalan(p),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _primary,
                   foregroundColor: Colors.white,
@@ -704,54 +956,25 @@ class _PesananListScreenState extends State<PesananListScreen> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                icon: const Icon(Icons.edit_note_rounded, size: 20),
-                label: const Text(
-                  'Catat pengiriman',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                icon: Icon(
+                  bisaCatatPengiriman
+                      ? Icons.edit_note_rounded
+                      : Icons.local_shipping_outlined,
+                  size: 20,
                 ),
-              ),
-            ),
-          ] else if (stepActive == 2 || stepActive == 3) ...[
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: OutlinedButton.icon(
-                onPressed: () => _buka(p),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _primary,
-                  side: const BorderSide(color: _primary),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                icon: const Icon(Icons.sync_rounded, size: 20),
-                label: const Text(
-                  'Perbarui status',
+                label: Text(
+                  bisaCatatPengiriman ? 'Catat Pengiriman' : 'Tandai Jalan',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
           ] else ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFCCFBF1).withOpacity(0.5),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.check_circle_rounded,
-                      color: Color(0xFF0D9488), size: 18),
-                  SizedBox(width: 8),
-                  Text(
-                    'Pengiriman Telah Selesai Diterima',
-                    style: TextStyle(
-                      color: Color(0xFF0D9488),
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => _buka(p),
+                icon: const Icon(Icons.open_in_new_rounded, size: 17),
+                label: const Text('Lihat detail pesanan'),
               ),
             ),
           ],
@@ -800,8 +1023,7 @@ class _PesananListScreenState extends State<PesananListScreen> {
                 steps[index ~/ 2],
                 style: TextStyle(
                   fontSize: 10,
-                  fontWeight:
-                      isStepPassed ? FontWeight.bold : FontWeight.w500,
+                  fontWeight: isStepPassed ? FontWeight.bold : FontWeight.w500,
                   color: isStepPassed ? themeColor : const Color(0xFF94A3B8),
                 ),
               ),
@@ -810,5 +1032,44 @@ class _PesananListScreenState extends State<PesananListScreen> {
         }
       }),
     );
+  }
+
+  Future<void> _tandaiJalan(Pesanan pesanan) async {
+    final setuju = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Tandai Jalan?'),
+        content: const Text(
+          'Pastikan kurir sudah mengabarkan bahwa pesanan telah berangkat.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Tandai Jalan'),
+          ),
+        ],
+      ),
+    );
+    if (setuju != true || !mounted) return;
+
+    try {
+      await _service.tandaiJalan(pesanan.id);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Pesanan ditandai sedang dalam perjalanan.'),
+        ),
+      );
+      await _muatAwal();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+    }
   }
 }

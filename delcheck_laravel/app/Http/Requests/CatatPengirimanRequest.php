@@ -4,11 +4,11 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class KirimPesananRequest extends FormRequest
+class CatatPengirimanRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true; // izin dijaga middleware permission:pengiriman.perbarui
+        return true; // akses dijaga role:admin dan permission:pesanan.proses
     }
 
     protected function prepareForValidation(): void
@@ -21,11 +21,12 @@ class KirimPesananRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'nama_pengemudi' => ['required', 'string', 'max:120'],
+            'telepon_pengemudi' => ['required', 'string', 'max:30'],
+            'nomor_kendaraan' => ['required', 'string', 'max:40'],
             'tanggal_kirim' => ['required', 'date_format:Y-m-d'],
             'estimasi_tiba' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:tanggal_kirim'],
-            // Nomor resi / surat jalan dari kurir (kurir berada di luar sistem).
             'nomor_surat_jalan' => ['nullable', 'string', 'max:40'],
-            // Catatan bebas, mis. nama kurir atau jasa pengiriman.
             'catatan' => ['nullable', 'string', 'max:1000'],
         ];
     }

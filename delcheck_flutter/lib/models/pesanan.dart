@@ -13,7 +13,7 @@ const _labelStatus = {
   'menunggu_konfirmasi_sales': 'Menunggu konfirmasi',
   'dikonfirmasi': 'Dikonfirmasi',
   'ditolak': 'Ditolak',
-  'diproses': 'Diserahkan ke kurir',
+  'diproses': 'Kurir',
   'dikirim': 'Dalam perjalanan',
   'diterima': 'Diterima',
   'selesai': 'Selesai',
@@ -42,20 +42,23 @@ class ItemPesanan {
   });
 
   factory ItemPesanan.fromJson(Map<String, dynamic> j) => ItemPesanan(
-        id: _i(j['id']),
-        produkId: _i(j['produk_id']),
-        namaProduk: _s(j['nama_produk']) ?? '-',
-        satuan: _s(j['satuan']) ?? '',
-        harga: _d(j['harga']),
-        qty: _i(j['qty']),
-        subtotal: _d(j['subtotal']),
-      );
+    id: _i(j['id']),
+    produkId: _i(j['produk_id']),
+    namaProduk: _s(j['nama_produk']) ?? '-',
+    satuan: _s(j['satuan']) ?? '',
+    harga: _d(j['harga']),
+    qty: _i(j['qty']),
+    subtotal: _d(j['subtotal']),
+  );
 }
 
 class PengirimanPesanan {
   final int id;
   final String? nomorSuratJalan;
-  final String status; // dikirim | diterima
+  final String status; // kurir | jalan | diterima
+  final String? namaPengemudi;
+  final String? teleponPengemudi;
+  final String? nomorKendaraan;
   final DateTime? tanggalKirim;
   final DateTime? estimasiTiba;
   final DateTime? diterimaAt;
@@ -65,6 +68,9 @@ class PengirimanPesanan {
     required this.id,
     this.nomorSuratJalan,
     required this.status,
+    this.namaPengemudi,
+    this.teleponPengemudi,
+    this.nomorKendaraan,
     this.tanggalKirim,
     this.estimasiTiba,
     this.diterimaAt,
@@ -76,6 +82,9 @@ class PengirimanPesanan {
         id: _i(j['id']),
         nomorSuratJalan: _s(j['nomor_surat_jalan']),
         status: _s(j['status']) ?? '',
+        namaPengemudi: _s(j['nama_pengemudi']),
+        teleponPengemudi: _s(j['telepon_pengemudi']),
+        nomorKendaraan: _s(j['nomor_kendaraan']),
         tanggalKirim: _dt(j['tanggal_kirim']),
         estimasiTiba: _dt(j['estimasi_tiba']),
         diterimaAt: _dt(j['diterima_at']),
@@ -146,7 +155,9 @@ class Pesanan {
       status: _s(j['status']) ?? '',
       total: _d(j['total']),
       catatan: _s(j['catatan']),
-      jumlahItem: j['jumlah_item'] != null ? _i(j['jumlah_item']) : items.length,
+      jumlahItem: j['jumlah_item'] != null
+          ? _i(j['jumlah_item'])
+          : items.length,
       tokoNama: _s(retailer['nama_toko']),
       tokoKode: _s(retailer['kode']),
       salesNama: _s(j['sales']),

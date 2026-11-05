@@ -15,7 +15,7 @@ class HalamanRetailer {
   });
 }
 
-/// Endpoint admin: verifikasi pendaftaran retail (izin retailer.verifikasi).
+/// Endpoint pendaftaran Retail yang hanya digunakan Sales untuk verifikasi.
 class AdminService {
   AdminService(this._api);
 
@@ -36,8 +36,8 @@ class AdminService {
       if (q.trim().isNotEmpty) 'q': q.trim(),
     };
     final body = await _api.get(
-        Uri(path: '/admin/pendaftaran-retail', queryParameters: query)
-            .toString());
+      Uri(path: '/admin/pendaftaran-retail', queryParameters: query).toString(),
+    );
 
     final data = body['data'] is Map<String, dynamic>
         ? body['data'] as Map<String, dynamic>
@@ -59,8 +59,9 @@ class AdminService {
   /// Menyetujui pendaftaran. Tidak ada penugasan sales.
   /// Mengembalikan pesan sukses dari server.
   Future<String> setujui(int retailerId) async {
-    final body =
-        await _api.post('/admin/pendaftaran-retail/$retailerId/setujui');
+    final body = await _api.post(
+      '/admin/pendaftaran-retail/$retailerId/setujui',
+    );
     return body['message']?.toString() ?? 'Pendaftaran disetujui.';
   }
 

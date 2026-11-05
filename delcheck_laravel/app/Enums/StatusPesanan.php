@@ -32,7 +32,7 @@ enum StatusPesanan: string
             self::MenungguKonfirmasiSales => 'Menunggu konfirmasi',
             self::Dikonfirmasi => 'Dikonfirmasi',
             self::Ditolak => 'Ditolak',
-            self::Diproses => 'Diserahkan ke kurir',
+            self::Diproses => 'Kurir',
             self::Dikirim => 'Dalam perjalanan',
             self::Diterima => 'Diterima',
             self::Selesai => 'Selesai',
