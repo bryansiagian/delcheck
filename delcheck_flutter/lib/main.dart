@@ -7,6 +7,7 @@ import 'core/config.dart';
 import 'providers/auth_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/splash_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,7 +40,7 @@ class DelCheckApp extends StatelessWidget {
   }
 }
 
-/// Menentukan halaman awal: login jika belum ada sesi, beranda jika sudah.
+/// Menentukan halaman awal: splash saat memeriksa, login jika belum ada sesi, beranda jika sudah.
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
@@ -48,9 +49,7 @@ class AuthGate extends StatelessWidget {
     final status = context.watch<AuthProvider>().status;
 
     return switch (status) {
-      AuthStatus.memeriksa => const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
+      AuthStatus.memeriksa => const SplashScreen(),
       AuthStatus.masuk => const HomeScreen(),
       AuthStatus.keluar => const LoginScreen(),
     };
