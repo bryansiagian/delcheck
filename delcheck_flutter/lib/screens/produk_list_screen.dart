@@ -573,6 +573,8 @@ class _ProdukListScreenState extends State<ProdukListScreen> {
 
   Widget _buildProdukCard(Produk p) {
     final isAktif = p.aktif;
+    // Otomatis ubah 'pak' menjadi 'pack' saat ditampilkan di UI
+    final satuanTampil = p.satuan.toLowerCase() == 'pak' ? 'pack' : p.satuan;
 
     return Container(
       decoration: BoxDecoration(
@@ -660,7 +662,7 @@ class _ProdukListScreenState extends State<ProdukListScreen> {
                                   ),
                                 ),
                                 TextSpan(
-                                  text: ' / ${p.satuan}',
+                                  text: ' / $satuanTampil',
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: _textMuted,
@@ -729,7 +731,7 @@ class _ProdukListScreenState extends State<ProdukListScreen> {
                               size: 15, color: _textMuted),
                           const SizedBox(width: 5),
                           Text(
-                            'Satuan: ${p.satuan}',
+                            'Satuan: $satuanTampil',
                             style: const TextStyle(
                               fontSize: 12,
                               color: _textMuted,
