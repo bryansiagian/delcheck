@@ -61,6 +61,9 @@ class _PesananListScreenState extends State<PesananListScreen> {
   int _total = 0;
   int _reqId = 0;
 
+  // Menyimpan hitungan untuk seluruh tab sekaligus
+  final Map<int, int> _countsPerFilter = {};
+
   bool _memuat = false;
   bool _memuatLagi = false;
   String? _error;
@@ -80,6 +83,7 @@ class _PesananListScreenState extends State<PesananListScreen> {
     _service = PesananService(context.read<ApiClient>());
     _scroll.addListener(_onScroll);
     _muatAwal();
+    _muatSemuaHitungan();
   }
 
   @override
@@ -93,6 +97,20 @@ class _PesananListScreenState extends State<PesananListScreen> {
   void _onScroll() {
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 200) {
       _muatLagi();
+    }
+  }
+
+  /// Menghitung angka untuk setiap tab filter di latar belakang
+  void _muatSemuaHitungan() {
+    for (int i = 0; i < widget.filter.length; i++) {
+      final f = widget.filter[i];
+      _service.daftar(status: f.status, q: _q, halaman: 1).then((res) {
+        if (mounted) {
+          setState(() {
+            _countsPerFilter[i] = res.total;
+          });
+        }
+      }).catchError((_) {});
     }
   }
 
@@ -112,6 +130,7 @@ class _PesananListScreenState extends State<PesananListScreen> {
         _halaman = h.halaman;
         _halamanTerakhir = h.halamanTerakhir;
         _total = h.total;
+        _countsPerFilter[_filterIndex] = h.total;
       });
     } on ApiException catch (e) {
       if (mounted && id == _reqId) setState(() => _error = e.message);
@@ -165,6 +184,7 @@ class _PesananListScreenState extends State<PesananListScreen> {
         _items.clear();
       });
       _muatAwal();
+      _muatSemuaHitungan();
     });
   }
 
@@ -173,7 +193,10 @@ class _PesananListScreenState extends State<PesananListScreen> {
       context,
       MaterialPageRoute(builder: (_) => PesananDetailScreen(id: p.id)),
     );
-    if (mounted) _muatAwal();
+    if (mounted) {
+      _muatAwal();
+      _muatSemuaHitungan();
+    }
   }
 
   Future<void> _pesanBaru() async {
@@ -181,7 +204,10 @@ class _PesananListScreenState extends State<PesananListScreen> {
       context,
       MaterialPageRoute(builder: (_) => const BuatPesananScreen()),
     );
-    if (mounted) _muatAwal();
+    if (mounted) {
+      _muatAwal();
+      _muatSemuaHitungan();
+    }
   }
 
   String _ambilInisial(String nama) {
@@ -341,10 +367,14 @@ class _PesananListScreenState extends State<PesananListScreen> {
                   Color iconBg = const Color(0xFFDBEAFE);
                   Color iconColor = _primary;
 
-                  if (item.label.toLowerCase().contains('siap')) {
+                  if (item.label.toLowerCase().contains('siap') ||
+                      item.label.toLowerCase().contains('proses') ||
+                      item.label.toLowerCase().contains('diproses')) {
                     iconBg = const Color(0xFFFFEDD5);
                     iconColor = const Color(0xFFF97316);
-                  } else if (item.label.toLowerCase().contains('kurir')) {
+                  } else if (item.label.toLowerCase().contains('kurir') ||
+                      item.label.toLowerCase().contains('setuju') ||
+                      item.label.toLowerCase().contains('disetujui')) {
                     iconBg = const Color(0xFFE0E7FF);
                     iconColor = const Color(0xFF4F46E5);
                   } else if (item.label.toLowerCase().contains('jalan')) {
@@ -354,6 +384,10 @@ class _PesananListScreenState extends State<PesananListScreen> {
                     iconBg = const Color(0xFFCCFBF1);
                     iconColor = const Color(0xFF0D9488);
                   }
+
+                  // Mengambil jumlah secara bersamaan untuk semua tab
+                  final jumlah = _countsPerFilter[i]?.toString() ??
+                      (isAktif ? '$_total' : '0');
 
                   return InkWell(
                     onTap: () => _gantiFilter(i),
@@ -391,7 +425,7 @@ class _PesananListScreenState extends State<PesananListScreen> {
                           Column(
                             children: [
                               Text(
-                                isAktif ? '$_total' : '-',
+                                jumlah, // <-- Menampilkan angka tanpa harus ditekan
                                 style: TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
@@ -427,7 +461,7 @@ class _PesananListScreenState extends State<PesananListScreen> {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Menampilkan $_total pengiriman',
+                'Menampilkan $_total ${widget.bisaBuat ? "pesanan" : "pengiriman"}',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
@@ -458,7 +492,10 @@ class _PesananListScreenState extends State<PesananListScreen> {
             Text(_error!, style: const TextStyle(color: _textMuted)),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _muatAwal,
+              onPressed: () {
+                _muatAwal();
+                _muatSemuaHitungan();
+              },
               child: const Text('Coba Lagi'),
             ),
           ],
@@ -467,7 +504,10 @@ class _PesananListScreenState extends State<PesananListScreen> {
     }
     if (_items.isEmpty) {
       return RefreshIndicator(
-        onRefresh: _muatAwal,
+        onRefresh: () async {
+          await _muatAwal();
+          _muatSemuaHitungan();
+        },
         color: _primary,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -502,7 +542,10 @@ class _PesananListScreenState extends State<PesananListScreen> {
     }
 
     return RefreshIndicator(
-      onRefresh: _muatAwal,
+      onRefresh: () async {
+        await _muatAwal();
+        _muatSemuaHitungan();
+      },
       color: _primary,
       child: ListView.separated(
         controller: _scroll,
@@ -739,54 +782,60 @@ class _PesananListScreenState extends State<PesananListScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Top Row: Nomor & Status Chip
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    '#${p.nomor}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: _textDark,
+          // 1. Top Row: Nomor & Status Chip (Responsif untuk layar HP)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '#${p.nomor}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: _textDark,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                p.dibuat != null ? formatTanggalJam(p.dibuat!) : '',
+                                style: const TextStyle(fontSize: 11, color: _textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: statusBg,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(statusIcon, color: statusColor, size: 14),
+                              const SizedBox(width: 5),
+                              Text(
+                                statusText,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    p.dibuat != null ? formatTanggalJam(p.dibuat!) : '',
-                    style: const TextStyle(fontSize: 11, color: _textMuted),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: statusBg,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  children: [
-                    Icon(statusIcon, color: statusColor, size: 14),
-                    const SizedBox(width: 5),
-                    Text(
-                      statusText,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: statusColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
 
           // 2. Store Row
           Row(
@@ -935,6 +984,7 @@ class _PesananListScreenState extends State<PesananListScreen> {
                                   ),
                                 );
                                 _muatAwal();
+                                _muatSemuaHitungan();
                               }
                               return true;
                             } on ApiException catch (error) {
@@ -1065,6 +1115,7 @@ class _PesananListScreenState extends State<PesananListScreen> {
         ),
       );
       await _muatAwal();
+      _muatSemuaHitungan();
     } on ApiException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
