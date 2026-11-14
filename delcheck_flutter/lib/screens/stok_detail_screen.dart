@@ -7,7 +7,7 @@ import '../core/format.dart';
 import '../models/stok.dart';
 import '../services/stok_service.dart';
 
-/// Layar Detail Stok & Mutasi Produk Modern
+/// Layar Detail Stock & Mutasi Produk Modern
 class StokDetailScreen extends StatefulWidget {
   const StokDetailScreen({super.key, required this.stok});
 
@@ -138,6 +138,10 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
         alasan: alasan.isEmpty ? null : alasan,
       );
       if (!mounted) return;
+
+      final satuanTampil =
+          baru.satuan.toLowerCase() == 'pak' ? 'pack' : baru.satuan;
+
       setState(() {
         _stok = baru;
         _jumlahCtrl.text = '10';
@@ -145,8 +149,8 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(_tambah
-            ? 'Stok bertambah ${formatAngka(jumlah)} ${_stok.satuan}.'
-            : 'Stok berkurang ${formatAngka(jumlah)} ${_stok.satuan}.'),
+            ? 'Stock bertambah ${formatAngka(jumlah)} $satuanTampil.'
+            : 'Stock berkurang ${formatAngka(jumlah)} $satuanTampil.'),
       ));
       await _muatRiwayat();
     } on ApiException catch (e) {
@@ -190,6 +194,9 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
     }
 
     final hasilStok = _hitungHasilStok();
+    // Otomatis ubah 'pak' menjadi 'pack'
+    final satuanTampil =
+        _stok.satuan.toLowerCase() == 'pak' ? 'pack' : _stok.satuan;
 
     return Scaffold(
       backgroundColor: _bgSurface,
@@ -234,7 +241,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                 ),
                 const SizedBox(width: 14),
                 const Text(
-                  'Detail Stok',
+                  'Detail Stock',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 20,
@@ -274,7 +281,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                // ================= CARD 1: RINGKASAN STOK =================
+                // ================= CARD 1: RINGKASAN STOCK =================
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -364,7 +371,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            _stok.satuan,
+                            satuanTampil,
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
@@ -400,7 +407,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                               size: 15, color: _outline),
                           const SizedBox(width: 6),
                           Text(
-                            'Minimum stok: ${formatAngka(_stok.stokMinimum)} ${_stok.satuan}',
+                            'Minimum stock: ${formatAngka(_stok.stokMinimum)} $satuanTampil',
                             style: const TextStyle(
                               fontSize: 12,
                               color: _textMuted,
@@ -413,7 +420,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // ================= CARD 2: PERBARUI STOK =================
+                // ================= CARD 2: PERBARUI STOCK =================
                 Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -433,7 +440,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Perbarui Stok',
+                          'Perbarui Stock',
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.bold,
@@ -622,7 +629,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                                       ),
                                     ),
                                     Text(
-                                      _stok.satuan,
+                                      satuanTampil,
                                       style: const TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w500,
@@ -700,7 +707,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                         ),
                         const SizedBox(height: 14),
 
-                        // Preview Box (Stok Setelah Perubahan)
+                        // Preview Box (Stock Setelah Perubahan)
                         Container(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 12),
@@ -712,7 +719,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text(
-                                'Stok setelah perubahan',
+                                'Stock setelah perubahan',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: _textMuted,
@@ -737,7 +744,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                                       ),
                                     ),
                                     TextSpan(
-                                      text: '$hasilStok ${_stok.satuan}',
+                                      text: '$hasilStok $satuanTampil',
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
@@ -785,7 +792,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                           ),
                           validator: (v) {
                             if (!_tambah && (v ?? '').trim().isEmpty) {
-                              return 'Alasan wajib diisi saat mengurangi stok';
+                              return 'Alasan wajib diisi saat mengurangi stock';
                             }
                             return null;
                           },
@@ -820,7 +827,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                                     ),
                                   )
                                 : Text(
-                                    _tambah ? 'Tambah stok' : 'Kurangi stok',
+                                    _tambah ? 'Tambah stock' : 'Kurangi stock',
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.bold,
@@ -834,12 +841,12 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // ================= 3. SECTION RIWAYAT STOK =================
+                // ================= 3. SECTION RIWAYAT STOCK =================
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Riwayat stok',
+                      'Riwayat stock',
                       style: TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.bold,
@@ -871,7 +878,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                       ),
                     ],
                   ),
-                  child: _buildRiwayatContent(),
+                  child: _buildRiwayatContent(satuanTampil),
                 ),
               ],
             ),
@@ -881,7 +888,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
     );
   }
 
-  Widget _buildRiwayatContent() {
+  Widget _buildRiwayatContent(String satuanTampil) {
     if (_errorRiwayat != null) {
       return Center(
         child: Column(
@@ -901,7 +908,8 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
       return const Padding(
         padding: EdgeInsets.all(16),
         child: Center(
-            child: CircularProgressIndicator(strokeWidth: 2.5, color: _primary)),
+            child:
+                CircularProgressIndicator(strokeWidth: 2.5, color: _primary)),
       );
     }
 
@@ -914,7 +922,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
               Icon(Icons.history_rounded, size: 40, color: Color(0xFFCBD5E1)),
               SizedBox(height: 8),
               Text(
-                'Belum ada riwayat mutasi stok.',
+                'Belum ada riwayat mutasi stock.',
                 style: TextStyle(color: _textMuted, fontSize: 13),
               ),
             ],
@@ -928,7 +936,7 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
         for (int i = 0; i < _riwayat.length; i++) ...[
           _buildTimelineItem(
             m: _riwayat[i],
-            satuan: _stok.satuan,
+            satuan: satuanTampil,
             isLast: i == _riwayat.length - 1,
           ),
         ],
@@ -960,7 +968,6 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
 
     return Stack(
       children: [
-        // Garis timeline vertikal
         if (!isLast)
           Positioned(
             left: 17,
@@ -976,7 +983,6 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Circle Icon
               Container(
                 width: 36,
                 height: 36,
@@ -989,8 +995,6 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                 ),
               ),
               const SizedBox(width: 14),
-
-              // Detail Mutasi
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1018,7 +1022,8 @@ class _StokDetailScreenState extends State<StokDetailScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      m.alasan ?? (isMasuk ? 'Penambahan stok' : 'Pengurangan stok'),
+                      m.alasan ??
+                          (isMasuk ? 'Penambahan stock' : 'Pengurangan stock'),
                       style: const TextStyle(
                         fontSize: 12,
                         color: _textDark,
