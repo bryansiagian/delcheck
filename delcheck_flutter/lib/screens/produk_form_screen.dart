@@ -26,7 +26,8 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
   static const Color _outline = Color(0xFF737686);
   static const Color _inputBg = Color(0xFFEFF4FF);
 
-  static const _satuanUmum = ['pcs', 'dus', 'pak', 'botol', 'kg', 'liter'];
+  // Satuan umum disesuaikan menjadi 'pack'
+  static const _satuanUmum = ['pcs', 'dus', 'pack', 'botol', 'kg', 'liter'];
 
   final _formKey = GlobalKey<FormState>();
   final _kodeCtrl = TextEditingController();
@@ -54,7 +55,7 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
     if (p != null) {
       _kodeCtrl.text = p.kode;
       _namaCtrl.text = p.nama;
-      _satuanCtrl.text = p.satuan;
+      _satuanCtrl.text = p.satuan.toLowerCase() == 'pak' ? 'pack' : p.satuan;
       _hargaCtrl.text = p.harga == p.harga.roundToDouble()
           ? p.harga.round().toString()
           : p.harga.toStringAsFixed(2);
@@ -113,8 +114,9 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text(_edit ? 'Produk berhasil diperbarui.' : 'Produk berhasil ditambahkan.'),
+          content: Text(_edit
+              ? 'Produk berhasil diperbarui.'
+              : 'Produk berhasil ditambahkan.'),
         ),
       );
       Navigator.pop(context, true);
@@ -232,7 +234,8 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
                       ),
                       const Text(
                         'Lengkapi detail inventaris & harga',
-                        style: TextStyle(color: Color(0xFFDBEAFE), fontSize: 12),
+                        style: TextStyle(
+                            color: Color(0xFFDBEAFE), fontSize: 12),
                       ),
                     ],
                   ),
@@ -444,8 +447,9 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
                           icon: Icons.straighten_rounded,
                           errorText: _fe('satuan'),
                         ),
-                        validator: (v) =>
-                            (v == null || v.trim().isEmpty) ? 'Satuan wajib diisi' : null,
+                        validator: (v) => (v == null || v.trim().isEmpty)
+                            ? 'Satuan wajib diisi'
+                            : null,
                       ),
                       const SizedBox(height: 12),
 
@@ -484,7 +488,8 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (_satuanCtrl.text.toLowerCase() == s) ...[
+                                    if (_satuanCtrl.text.toLowerCase() ==
+                                        s) ...[
                                       const Icon(Icons.check,
                                           size: 14, color: Colors.white),
                                       const SizedBox(width: 4),
@@ -494,7 +499,8 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
                                       style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
-                                        color: _satuanCtrl.text.toLowerCase() == s
+                                        color: _satuanCtrl.text.toLowerCase() ==
+                                                s
                                             ? Colors.white
                                             : _textDark,
                                       ),
@@ -529,7 +535,8 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
                         validator: (v) {
                           final t = (v ?? '').trim();
                           if (t.isEmpty) return 'Harga wajib diisi';
-                          if (double.tryParse(t) == null) return 'Harga tidak valid';
+                          if (double.tryParse(t) == null)
+                            return 'Harga tidak valid';
                           return null;
                         },
                       ),
@@ -542,12 +549,12 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // ================= CARD 3: PENGATURAN STOK =================
+                  // ================= CARD 3: PENGATURAN STOCK =================
                   _buildFormCard(
                     icon: Icons.layers_outlined,
                     iconBg: const Color(0xFFDCE9FF),
                     iconColor: _primary,
-                    title: 'Pengaturan Stok',
+                    title: 'Pengaturan Stock',
                     subtitle: 'Batas aman ketersediaan gudang pusat',
                     children: [
                       Container(
@@ -563,7 +570,7 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Batas Stok Minimum',
+                                  'Batas Stock Minimum',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
@@ -647,7 +654,7 @@ class _ProdukFormScreenState extends State<ProdukFormScreen> {
                             SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Peringatan stok menipis otomatis aktif jika jumlah barang di bawah angka ini.',
+                                'Peringatan stock menipis otomatis aktif jika jumlah barang di bawah angka ini.',
                                 style: TextStyle(
                                     fontSize: 11,
                                     color: Color(0xFF783200),
