@@ -1,18 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../widgets/catat_pengiriman_bottom_sheet.dart';
 import '../core/api_client.dart';
 import '../core/format.dart';
 import '../models/pesanan.dart';
 import '../providers/auth_provider.dart';
 import '../services/pesanan_service.dart';
+import '../widgets/catat_pengiriman_bottom_sheet.dart';
 import '../widgets/status_pesanan_chip.dart';
 
-/// Detail pesanan. Tombol aksi menyesuaikan peran dan status:
-///  - Retail   : batalkan (menunggu), konfirmasi diterima (dalam perjalanan)
-///  - Sales    : setujui / tolak (menunggu)
-///  - Admin    : catat pengiriman (dikonfirmasi), tandai jalan (Kurir)
+/// Detail pesanan modern sesuai desain HTML Tailwind
 class PesananDetailScreen extends StatefulWidget {
   const PesananDetailScreen({super.key, required this.id});
 
@@ -23,6 +21,14 @@ class PesananDetailScreen extends StatefulWidget {
 }
 
 class _PesananDetailScreenState extends State<PesananDetailScreen> {
+  // Palet Warna Sesuai Tailwind HTML
+  static const Color _bgSurface = Color(0xFFF8F9FF);
+  static const Color _primary = Color(0xFF2563EB);
+  static const Color _primaryDark = Color(0xFF004AC6);
+  static const Color _textDark = Color(0xFF0B1C30);
+  static const Color _textMuted = Color(0xFF4D556B);
+  static const Color _outline = Color(0xFF737686);
+
   late final PesananService _service;
   Pesanan? _p;
   bool _memuat = true;
@@ -51,32 +57,31 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
     }
   }
 
-  Future<bool> _jalankan(Future<Pesanan> Function() aksi, String sukses) async {
+  Future<bool> _jalankan(
+      Future<Pesanan> Function() aksi, String sukses) async {
     setState(() => _bekerja = true);
     try {
       final baru = await aksi();
       if (!mounted) return false;
       setState(() => _p = baru);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(sukses)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(sukses)));
       return true;
     } on ApiException catch (e) {
       if (!mounted) return false;
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text('Tindakan gagal'),
           content: Text(e.message),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Tutup'),
-            ),
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Tutup')),
           ],
         ),
       );
-      // Status sudah berubah di sisi server: muat ulang tampilan.
       if (mounted && e.kode == 'STATUS_PESANAN_TIDAK_VALID') _muat();
       return false;
     } finally {
@@ -88,17 +93,20 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
     final ya = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(judul),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(judul, style: const TextStyle(fontWeight: FontWeight.bold)),
         content: Text(isi),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Batal'),
-          ),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Batal', style: TextStyle(color: _textMuted))),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text(tombol),
-          ),
+              style: FilledButton.styleFrom(
+                backgroundColor: _primary,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(tombol)),
         ],
       ),
     );
@@ -112,14 +120,11 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
     );
   }
 
-  // ---- aksi Retail
+  // ---- Aksi Retail
   Future<void> _batalkan(Pesanan p) async {
     final alasan = await _mintaAlasan('Batalkan pesanan', 'Alasan pembatalan');
     if (alasan == null || !mounted) return;
-    await _jalankan(
-      () => _service.batalkan(p.id, alasan),
-      'Pesanan dibatalkan.',
-    );
+    await _jalankan(() => _service.batalkan(p.id, alasan), 'Pesanan dibatalkan.');
   }
 
   Future<void> _terima(Pesanan p) async {
@@ -129,13 +134,10 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
       'Ya, sudah diterima',
     );
     if (!ya) return;
-    await _jalankan(
-      () => _service.terima(p.id),
-      'Pesanan dikonfirmasi diterima.',
-    );
+    await _jalankan(() => _service.terima(p.id), 'Pesanan dikonfirmasi diterima.');
   }
 
-  // ---- aksi Sales
+  // ---- Aksi Sales
   Future<void> _setujui(Pesanan p) async {
     final ya = await _konfirmasi(
       'Setujui pesanan?',
@@ -152,28 +154,47 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
     await _jalankan(() => _service.tolak(p.id, alasan), 'Pesanan ditolak.');
   }
 
-  // ---- aksi Admin
-  Future<void> _catatPengiriman(Pesanan p) async {
-    await CatatPengirimanBottomSheet.show(
-      context: context,
-      pesanan: p,
-      onSubmit: (data) => _jalankan(
-        () => _service.catatPengiriman(p.id, data),
-        'Pengiriman dicatat dan stok diperbarui.',
-      ),
-    );
-  }
-
-  Future<void> _tandaiJalan(Pesanan p) async {
+  // ---- Aksi Warehouse / Admin
+  Future<void> _proses(Pesanan p) async {
     final ya = await _konfirmasi(
-      'Tandai pesanan jalan?',
-      'Konfirmasikan bahwa kurir telah mengabarkan pesanan ini berangkat.',
-      'Tandai Jalan',
+      'Barang sudah bersama kurir?',
+      'Tandai pesanan ${p.nomor} sudah diserahkan ke kurir.',
+      'Ya, bersama kurir',
     );
     if (!ya) return;
     await _jalankan(
       () => _service.tandaiJalan(p.id),
-      'Pesanan ditandai sedang dalam perjalanan.',
+      'Pesanan diserahkan ke kurir.',
+    );
+  }
+
+  Future<void> _kirim(Pesanan p) async {
+    await CatatPengirimanBottomSheet.show(
+      context: context,
+      pesanan: p,
+      onSubmit: (data) {
+        return _jalankan(
+          () => _service.catatPengiriman(p.id, data),
+          'Pengiriman berhasil dicatat dan diserahkan ke kurir.',
+        );
+      },
+    );
+  }
+
+  void _salinKode(String kode) {
+    Clipboard.setData(ClipboardData(text: kode));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+            SizedBox(width: 8),
+            Text('Nomor pesanan disalin ke clipboard'),
+          ],
+        ),
+      ),
     );
   }
 
@@ -181,7 +202,8 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
     final user = context.read<AuthProvider>().user;
     final retail = user?.punyaPeran('retail') ?? false;
     final sales = user?.punyaPeran('sales') ?? false;
-    final admin = user?.punyaPeran('admin') ?? false;
+    final gudang = (user?.punyaPeran('warehouse') ?? false) ||
+        (user?.punyaPeran('admin') ?? false);
 
     final List<Widget> tombol;
 
@@ -195,14 +217,12 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
           ),
         ),
       ];
-    } else if (retail &&
-        p.status == 'dikirim' &&
-        p.pengiriman?.status == 'jalan') {
+    } else if (retail && p.status == 'dikirim') {
       tombol = [
         Expanded(
           child: FilledButton.icon(
             onPressed: _bekerja ? null : () => _terima(p),
-            icon: const Icon(Icons.inventory),
+            icon: const Icon(Icons.check_circle_outline),
             label: const Text('Pesanan sudah diterima'),
           ),
         ),
@@ -225,25 +245,31 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
           ),
         ),
       ];
-    } else if (admin && p.status == 'dikonfirmasi' && p.pengiriman == null) {
+    } else if (gudang && p.status == 'dikonfirmasi') {
       tombol = [
         Expanded(
+          child: OutlinedButton.icon(
+            onPressed: _bekerja ? null : () => _proses(p),
+            icon: const Icon(Icons.handshake_outlined),
+            label: const Text('Bersama kurir'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
           child: FilledButton.icon(
-            onPressed: _bekerja ? null : () => _catatPengiriman(p),
-            icon: const Icon(Icons.edit_note_rounded),
-            label: const Text('Catat Pengiriman'),
+            onPressed: _bekerja ? null : () => _kirim(p),
+            icon: const Icon(Icons.local_shipping_outlined),
+            label: const Text('Dalam perjalanan'),
           ),
         ),
       ];
-    } else if (admin &&
-        p.status == 'diproses' &&
-        p.pengiriman?.status == 'kurir') {
+    } else if (gudang && p.status == 'diproses') {
       tombol = [
         Expanded(
           child: FilledButton.icon(
-            onPressed: _bekerja ? null : () => _tandaiJalan(p),
+            onPressed: _bekerja ? null : () => _kirim(p),
             icon: const Icon(Icons.local_shipping_outlined),
-            label: const Text('Tandai Jalan'),
+            label: const Text('Dalam perjalanan'),
           ),
         ),
       ];
@@ -251,12 +277,29 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
       return null;
     }
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(children: tombol),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
       ),
+      child: SafeArea(child: Row(children: tombol)),
     );
+  }
+
+  String _ambilInisial(String nama) {
+    if (nama.trim().isEmpty) return 'TK';
+    final parts = nama.trim().split(' ');
+    if (parts.length >= 2) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    return nama.substring(0, nama.length >= 2 ? 2 : 1).toUpperCase();
   }
 
   @override
@@ -264,317 +307,629 @@ class _PesananDetailScreenState extends State<PesananDetailScreen> {
     final p = _p;
 
     return Scaffold(
-      appBar: AppBar(title: Text(p?.nomor ?? 'Detail Pesanan')),
-      body: _memuat && p == null
-          ? const Center(child: CircularProgressIndicator())
-          : p == null
-          ? Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _error ?? 'Pesanan tidak ditemukan.',
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton.tonal(
-                      onPressed: _muat,
-                      child: const Text('Coba lagi'),
-                    ),
-                  ],
-                ),
+      backgroundColor: _bgSurface,
+      body: Column(
+        children: [
+          // ================= 1. HEADER BIRU LENGKUNG =================
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 44, 16, 32),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [_primaryDark, _primary],
               ),
-            )
-          : RefreshIndicator(
-              onRefresh: _muat,
-              child: _Isi(pesanan: p),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(32),
+                bottomRight: Radius.circular(32),
+              ),
             ),
-      bottomNavigationBar: p == null ? null : _aksiBar(p),
-    );
-  }
-}
-
-class _Isi extends StatelessWidget {
-  const _Isi({required this.pesanan});
-
-  final Pesanan pesanan;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = pesanan;
-    final tema = Theme.of(context);
-
-    final statusKirim = p.pengiriman?.status;
-    final statusKonsisten = switch (p.status) {
-      'menunggu_konfirmasi_sales' || 'ditolak' || 'dibatalkan' =>
-        p.pengiriman == null,
-      'dikonfirmasi' => p.pengiriman == null,
-      'diproses' => statusKirim == 'kurir',
-      'dikirim' => statusKirim == 'jalan',
-      'diterima' || 'selesai' => statusKirim == 'diterima',
-      _ => true,
-    };
-    final linimasa = <MapEntry<String, DateTime?>>[
-      MapEntry('Siap', p.dikonfirmasiAt),
-      MapEntry(
-        'Kurir',
-        statusKirim == 'kurir' ||
-                statusKirim == 'jalan' ||
-                statusKirim == 'diterima'
-            ? p.diprosesAt
-            : null,
-      ),
-      MapEntry(
-        'Jalan',
-        statusKirim == 'jalan' || statusKirim == 'diterima'
-            ? p.dikirimAt
-            : null,
-      ),
-      MapEntry('Diterima', statusKirim == 'diterima' ? p.diterimaAt : null),
-    ];
-
-    return ListView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        p.tokoNama ?? 'Pesanan',
-                        style: tema.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                InkWell(
+                  onTap: () => Navigator.pop(context),
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      shape: BoxShape.circle,
                     ),
-                    StatusPesananChip(status: p.status),
-                  ],
-                ),
-                if (p.tokoKode != null) ...[
-                  const SizedBox(height: 2),
-                  Text(p.tokoKode!, style: tema.textTheme.bodySmall),
-                ],
-                if (p.salesNama != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Dikonfirmasi oleh ${p.salesNama}',
-                    style: tema.textTheme.bodySmall,
+                    child: const Icon(Icons.arrow_back,
+                        color: Colors.white, size: 22),
                   ),
-                ],
-                if (p.catatan != null) ...[
-                  const SizedBox(height: 8),
-                  Text('Catatan: ${p.catatan}'),
-                ],
+                ),
+                const Text(
+                  'Detail Pesanan',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                InkWell(
+                  onTap: p != null ? () => _salinKode(p.nomor) : null,
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.content_copy_rounded,
+                        color: Colors.white, size: 20),
+                  ),
+                ),
               ],
             ),
           ),
-        ),
 
-        if (p.alasanDitolak != null)
-          _Peringatan(teks: 'Ditolak: ${p.alasanDitolak}'),
-        if (p.alasanBatal != null)
-          _Peringatan(teks: 'Dibatalkan: ${p.alasanBatal}'),
-        if (!statusKonsisten)
-          const _Peringatan(
-            teks: 'Status pesanan dan pengiriman tidak sesuai. Silakan hubungi Admin.',
-          ),
-
-        // ---- barang
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-          child: Text('Barang pesanan', style: tema.textTheme.titleSmall),
-        ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Column(
-              children: [
-                for (final item in p.items)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
+          // ================= 2. ISI KONTEN =================
+          Expanded(
+            child: _memuat && p == null
+                ? const Center(child: CircularProgressIndicator(color: _primary))
+                : p == null
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                item.namaProduk,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                '${formatAngka(item.qty)} ${item.satuan} × ${formatRupiah(item.harga)}',
-                                style: tema.textTheme.bodySmall,
-                              ),
+                              Text(_error ?? 'Pesanan tidak ditemukan.',
+                                  textAlign: TextAlign.center),
+                              const SizedBox(height: 12),
+                              FilledButton.tonal(
+                                  onPressed: _muat,
+                                  child: const Text('Coba lagi')),
                             ],
                           ),
                         ),
-                        Text(formatRupiah(item.subtotal)),
-                      ],
-                    ),
-                  ),
-                const Divider(),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text('Total', style: tema.textTheme.titleSmall),
-                      ),
-                      Text(
-                        formatRupiah(p.total),
-                        style: tema.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
+                      )
+                    : RefreshIndicator(
+                        color: _primary,
+                        onRefresh: _muat,
+                        child: ListView(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                          children: [
+                            // ================= CARD 1: RINGKASAN PESANAN (-mt-10) =================
+                            Transform.translate(
+                              offset: const Offset(0, -18),
+                              child: Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(24),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.05),
+                                      blurRadius: 14,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'Nomor pesanan',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: _outline,
+                                                  fontWeight: FontWeight.w500),
+                                            ),
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              p.nomor,
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                                color: _textDark,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        StatusPesananChip(status: p.status),
+                                      ],
+                                    ),
+                                    const Padding(
+                                      padding:
+                                          EdgeInsets.symmetric(vertical: 12),
+                                      child: Divider(
+                                          height: 1, color: Color(0xFFF1F5F9)),
+                                    ),
+
+                                    // Profil Toko
+                                    Row(
+                                      children: [
+                                        Container(
+                                          width: 44,
+                                          height: 44,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFFD3E4FE),
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: Text(
+                                            _ambilInisial(p.tokoNama ?? 'TK'),
+                                            style: const TextStyle(
+                                              color: _primary,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                p.tokoNama ?? 'Toko Retail',
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: _textDark,
+                                                ),
+                                              ),
+                                              Text(
+                                                p.tokoKode ?? 'Mitra Retail',
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: _textMuted),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+
+                                    // Meta info
+                                    if (p.salesNama != null) ...[
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.person_pin_circle_outlined,
+                                              size: 16, color: _outline),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'Dikonfirmasi oleh ${p.salesNama}',
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: _textMuted),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                    ],
+                                    if (p.dibuat != null) ...[
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.calendar_today_outlined,
+                                              size: 15, color: _outline),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            formatTanggalJam(p.dibuat!),
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: _textMuted),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                    ],
+
+                                    // Box Catatan
+                                    if (p.catatan != null &&
+                                        p.catatan!.trim().isNotEmpty) ...[
+                                      Container(
+                                        width: double.infinity,
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEFF4FF),
+                                          borderRadius:
+                                              BorderRadius.circular(16),
+                                        ),
+                                        child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const Icon(Icons.chat_bubble_outline_rounded,
+                                                size: 16, color: _outline),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  const Text(
+                                                    'Catatan',
+                                                    style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: _outline,
+                                                        fontWeight:
+                                                            FontWeight.w600),
+                                                  ),
+                                                  Text(
+                                                    p.catatan!,
+                                                    style: const TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        color: _textDark),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+
+                                    // Warning jika ditolak / batal
+                                    if (p.alasanDitolak != null)
+                                      _buildAlertBanner('Ditolak Sales: ${p.alasanDitolak}'),
+                                    if (p.alasanBatal != null)
+                                      _buildAlertBanner('Dibatalkan: ${p.alasanBatal}'),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // ================= CARD 2: BARANG PESANAN =================
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.04),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        'Barang Pesanan',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: _textDark,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 10, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEFF4FF),
+                                          borderRadius:
+                                              BorderRadius.circular(20),
+                                        ),
+                                        child: Text(
+                                          '${p.items.length} barang',
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: _outline),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+
+                                  // Daftar Barang
+                                  for (int i = 0; i < p.items.length; i++) ...[
+                                    if (i > 0)
+                                      const Divider(
+                                          height: 20,
+                                          color: Color(0xFFF1F5F9)),
+                                    _buildItemRow(p.items[i]),
+                                  ],
+                                  const SizedBox(height: 16),
+
+                                  // Total Box
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFD3E4FE)
+                                          .withOpacity(0.5),
+                                      borderRadius:
+                                          BorderRadius.circular(16),
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        const Text(
+                                          'Total',
+                                          style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                              color: _textMuted),
+                                        ),
+                                        Text(
+                                          formatRupiah(p.total),
+                                          style: const TextStyle(
+                                            fontSize: 19,
+                                            fontWeight: FontWeight.bold,
+                                            color: _primary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // ================= CARD 3: STATUS PENGIRIMAN =================
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.04),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Status Pengiriman',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: _textDark,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 18),
+                                  _buildTimelineStep(
+                                    title: 'Siap dikirim',
+                                    date: p.dikonfirmasiAt != null
+                                        ? formatTanggalJam(p.dikonfirmasiAt!)
+                                        : (p.dibuat != null
+                                            ? formatTanggalJam(p.dibuat!)
+                                            : null),
+                                    icon: Icons.inventory_2_rounded,
+                                    isDone: p.status != 'menunggu_konfirmasi_sales' &&
+                                        p.status != 'ditolak' &&
+                                        p.status != 'dibatalkan',
+                                    isActive: p.status == 'dikonfirmasi',
+                                    isLast: false,
+                                  ),
+                                  _buildTimelineStep(
+                                    title: 'Bersama kurir',
+                                    date: p.diprosesAt != null
+                                        ? formatTanggalJam(p.diprosesAt!)
+                                        : null,
+                                    icon: Icons.person_pin_circle_rounded,
+                                    isDone: p.status == 'diproses' ||
+                                        p.status == 'dikirim' ||
+                                        p.status == 'diterima' ||
+                                        p.status == 'selesai',
+                                    isActive: p.status == 'diproses',
+                                    isLast: false,
+                                  ),
+                                  _buildTimelineStep(
+                                    title: 'Dalam perjalanan',
+                                    date: p.dikirimAt != null
+                                        ? formatTanggalJam(p.dikirimAt!)
+                                        : null,
+                                    icon: Icons.local_shipping_rounded,
+                                    isDone: p.status == 'dikirim' ||
+                                        p.status == 'diterima' ||
+                                        p.status == 'selesai',
+                                    isActive: p.status == 'dikirim',
+                                    isLast: false,
+                                  ),
+                                  _buildTimelineStep(
+                                    title: 'Diterima',
+                                    date: p.diterimaAt != null
+                                        ? formatTanggalJam(p.diterimaAt!)
+                                        : null,
+                                    icon: Icons.check_circle_rounded,
+                                    isDone: p.status == 'diterima' ||
+                                        p.status == 'selesai',
+                                    isActive: p.status == 'diterima' ||
+                                        p.status == 'selesai',
+                                    isLast: true,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // ---- pengiriman
-        if (p.pengiriman != null) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-            child: Text('Pengiriman', style: tema.textTheme.titleSmall),
-          ),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _Baris(
-                    'No. surat jalan / resi',
-                    p.pengiriman!.nomorSuratJalan,
-                  ),
-                  _Baris('Status pengiriman', p.pengiriman!.status),
-                  _Baris('Nama pengemudi', p.pengiriman!.namaPengemudi),
-                  _Baris('Telepon pengemudi', p.pengiriman!.teleponPengemudi),
-                  _Baris('Nomor kendaraan', p.pengiriman!.nomorKendaraan),
-                  _Baris(
-                    'Dicatat pada',
-                    p.diprosesAt == null
-                        ? null
-                        : formatTanggalJam(p.diprosesAt!),
-                  ),
-                  _Baris(
-                    'Berangkat pada',
-                    p.dikirimAt == null ? null : formatTanggalJam(p.dikirimAt!),
-                  ),
-                  _Baris(
-                    'Tanggal kirim',
-                    p.pengiriman!.tanggalKirim == null
-                        ? null
-                        : formatTanggal(p.pengiriman!.tanggalKirim!),
-                  ),
-                  _Baris(
-                    'Estimasi tiba',
-                    p.pengiriman!.estimasiTiba == null
-                        ? null
-                        : formatTanggal(p.pengiriman!.estimasiTiba!),
-                  ),
-                  _Baris('Catatan', p.pengiriman!.catatan),
-                ],
-              ),
-            ),
           ),
         ],
+      ),
+      bottomNavigationBar: p == null ? null : _aksiBar(p),
+    );
+  }
 
-        // ---- linimasa
-        Padding(
-          padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-          child: Text('Riwayat status', style: tema.textTheme.titleSmall),
+  Widget _buildItemRow(ItemPesanan item) {
+    final satuanTampil =
+        item.satuan.toLowerCase() == 'pak' ? 'pack' : item.satuan;
+
+    return Row(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFFD3E4FE),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Icon(Icons.inventory_2_rounded,
+              color: _primary, size: 22),
         ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                for (final e in linimasa)
-                  _Baris(
-                    e.key,
-                    e.value == null
-                        ? 'Belum tercapai'
-                        : formatTanggalJam(e.value!),
-                  ),
-              ],
-            ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.namaProduk,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: _textDark,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${formatAngka(item.qty)} $satuanTampil × ${formatRupiah(item.harga)}',
+                style: const TextStyle(fontSize: 12, color: _outline),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 16),
+        Text(
+          formatRupiah(item.subtotal),
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: _textDark,
+          ),
+        ),
       ],
     );
   }
-}
 
-class _Peringatan extends StatelessWidget {
-  const _Peringatan({required this.teks});
+  Widget _buildTimelineStep({
+    required String title,
+    required String? date,
+    required IconData icon,
+    required bool isDone,
+    required bool isActive,
+    required bool isLast,
+  }) {
+    Color iconBg = const Color(0xFFEFF4FF);
+    Color iconColor = const Color(0xFFC3C6D7);
+    Color titleColor = _textMuted;
+    Color subColor = _outline;
 
-  final String teks;
+    if (isActive) {
+      iconBg = const Color(0xFFFFDBCA);
+      iconColor = const Color(0xFFF97316);
+      titleColor = _textDark;
+      subColor = _textMuted;
+    } else if (isDone) {
+      iconBg = const Color(0xFFD3E4FE);
+      iconColor = _primary;
+      titleColor = _textDark;
+      subColor = _textMuted;
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    final tema = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: tema.colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        teks,
-        style: TextStyle(color: tema.colorScheme.onErrorContainer),
-      ),
+    return Stack(
+      children: [
+        if (!isLast)
+          Positioned(
+            left: 15,
+            top: 30,
+            bottom: 0,
+            child: Container(
+              width: 2,
+              color: const Color(0xFFF1F5F9),
+            ),
+          ),
+        Padding(
+          padding: EdgeInsets.only(bottom: isLast ? 0 : 20),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  shape: BoxShape.circle,
+                  border: isActive
+                      ? Border.all(color: const Color(0xFFFDBA74), width: 2)
+                      : null,
+                ),
+                child: Icon(icon, color: iconColor, size: 16),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight:
+                            isActive || isDone ? FontWeight.bold : FontWeight.w500,
+                        color: titleColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      date ?? 'Belum tercapai',
+                      style: TextStyle(fontSize: 12, color: subColor),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
-}
 
-class _Baris extends StatelessWidget {
-  const _Baris(this.label, this.nilai);
-
-  final String label;
-  final String? nilai;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+  Widget _buildAlertBanner(String teks) {
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFDAD6),
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 140,
-            child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+          const Icon(Icons.error_outline, color: Color(0xFFBA1A1A), size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              teks,
+              style: const TextStyle(color: Color(0xFFBA1A1A), fontSize: 12),
+            ),
           ),
-          Expanded(child: Text(nilai ?? '-')),
         ],
       ),
     );
   }
 }
 
-/// Dialog alasan (wajib diisi), untuk menolak dan membatalkan pesanan.
+/// Dialog alasan pembatalan / penolakan
 class _AlasanDialog extends StatefulWidget {
   const _AlasanDialog({required this.judul, required this.label});
 
@@ -598,7 +953,9 @@ class _AlasanDialogState extends State<_AlasanDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.judul),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(widget.judul,
+          style: const TextStyle(fontWeight: FontWeight.bold)),
       content: Form(
         key: _formKey,
         child: TextFormField(
@@ -608,7 +965,8 @@ class _AlasanDialogState extends State<_AlasanDialog> {
           textCapitalization: TextCapitalization.sentences,
           decoration: InputDecoration(
             labelText: widget.label,
-            border: const OutlineInputBorder(),
+            border:
+                OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
           validator: (v) =>
               (v == null || v.trim().isEmpty) ? 'Alasan wajib diisi' : null,
@@ -616,9 +974,8 @@ class _AlasanDialogState extends State<_AlasanDialog> {
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Batal'),
-        ),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal')),
         FilledButton(
           onPressed: () {
             if (_formKey.currentState!.validate()) {
@@ -626,134 +983,6 @@ class _AlasanDialogState extends State<_AlasanDialog> {
             }
           },
           child: const Text('Kirim'),
-        ),
-      ],
-    );
-  }
-}
-
-/// Dialog catatan pengiriman. Kurir berada di luar sistem, jadi nama kurir
-/// dicatat di kolom catatan dan resi di nomor surat jalan.
-class _KirimDialog extends StatefulWidget {
-  const _KirimDialog();
-
-  @override
-  State<_KirimDialog> createState() => _KirimDialogState();
-}
-
-class _KirimDialogState extends State<_KirimDialog> {
-  final _suratCtrl = TextEditingController();
-  final _catatanCtrl = TextEditingController();
-  DateTime _tanggal = DateTime.now();
-  DateTime? _estimasi;
-
-  @override
-  void dispose() {
-    _suratCtrl.dispose();
-    _catatanCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pilihTanggal() async {
-    final hariIni = DateTime.now();
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _tanggal,
-      firstDate: hariIni.subtract(const Duration(days: 30)),
-      lastDate: hariIni.add(const Duration(days: 30)),
-    );
-    if (d == null) return;
-    setState(() {
-      _tanggal = d;
-      if (_estimasi != null && _estimasi!.isBefore(d)) _estimasi = null;
-    });
-  }
-
-  Future<void> _pilihEstimasi() async {
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _estimasi ?? _tanggal,
-      firstDate: _tanggal,
-      lastDate: _tanggal.add(const Duration(days: 60)),
-    );
-    if (d != null) setState(() => _estimasi = d);
-  }
-
-  String? _kosongJadiNull(String s) => s.trim().isEmpty ? null : s.trim();
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Barang dalam perjalanan'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text('Stok produk akan berkurang sesuai jumlah pesanan.'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _suratCtrl,
-              maxLength: 40,
-              decoration: const InputDecoration(
-                labelText: 'No. surat jalan / resi (opsional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _pilihTanggal,
-              icon: const Icon(Icons.event),
-              label: Text('Tanggal kirim: ${formatTanggal(_tanggal)}'),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _pilihEstimasi,
-                    icon: const Icon(Icons.event_available),
-                    label: Text(
-                      _estimasi == null
-                          ? 'Estimasi tiba (opsional)'
-                          : 'Tiba: ${formatTanggal(_estimasi!)}',
-                    ),
-                  ),
-                ),
-                if (_estimasi != null)
-                  IconButton(
-                    tooltip: 'Hapus estimasi',
-                    icon: const Icon(Icons.clear),
-                    onPressed: () => setState(() => _estimasi = null),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _catatanCtrl,
-              maxLines: 2,
-              textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                labelText: 'Catatan, mis. nama kurir (opsional)',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Batal'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context, <String, dynamic>{
-            'tanggal_kirim': tanggalApi(_tanggal),
-            'estimasi_tiba': _estimasi == null ? null : tanggalApi(_estimasi!),
-            'nomor_surat_jalan': _kosongJadiNull(_suratCtrl.text),
-            'catatan': _kosongJadiNull(_catatanCtrl.text),
-          }),
-          child: const Text('Tandai dikirim'),
         ),
       ],
     );

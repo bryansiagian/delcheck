@@ -9,7 +9,7 @@ import '../models/stok.dart';
 import '../services/stok_service.dart';
 import 'stok_detail_screen.dart';
 
-/// Daftar stok semua produk untuk Admin dan Warehouse dengan UI modern
+/// Daftar stock semua produk untuk Admin dan Warehouse dengan UI modern
 class StokListScreen extends StatefulWidget {
   const StokListScreen({super.key});
 
@@ -218,7 +218,7 @@ class _StokListScreenState extends State<StokListScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Stok Produk',
+                              'Stock Produk',
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 20,
@@ -227,7 +227,7 @@ class _StokListScreenState extends State<StokListScreen> {
                             ),
                             SizedBox(height: 2),
                             Text(
-                              'Pantau dan perbarui jumlah stok',
+                              'Pantau dan perbarui jumlah stock',
                               style: TextStyle(
                                 color: Color(0xFFDBEAFE),
                                 fontSize: 12,
@@ -443,7 +443,7 @@ class _StokListScreenState extends State<StokListScreen> {
                                           ),
                                         ),
                                         Text(
-                                          'Perlu restok',
+                                          'Perlu restock',
                                           style: TextStyle(
                                             fontSize: 10,
                                             color: _outline,
@@ -572,7 +572,7 @@ class _StokListScreenState extends State<StokListScreen> {
                   const SizedBox(height: 12),
                   Text(
                     _hanyaMenipis
-                        ? 'Tidak ada produk dengan stok menipis.'
+                        ? 'Tidak ada produk dengan stock menipis.'
                         : 'Belum ada produk. Tambahkan produk lebih dulu.',
                     style: const TextStyle(
                         color: _textMuted, fontWeight: FontWeight.w500),
@@ -678,6 +678,9 @@ class _StokListScreenState extends State<StokListScreen> {
       progressBarColor = _warningBar;
     }
 
+    // Otomatis ubah 'pak' menjadi 'pack'
+    final satuanTampil = s.satuan.toLowerCase() == 'pak' ? 'pack' : s.satuan;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -756,7 +759,7 @@ class _StokListScreenState extends State<StokListScreen> {
                               ),
                             ),
                             Text(
-                              s.satuan,
+                              satuanTampil,
                               style: const TextStyle(
                                 fontSize: 11,
                                 color: _outline,
@@ -813,7 +816,7 @@ class _StokListScreenState extends State<StokListScreen> {
                         ),
                         const SizedBox(width: 5),
                         Text(
-                          'Minimum ${formatAngka(s.stokMinimum)} ${s.satuan}',
+                          'Minimum ${formatAngka(s.stokMinimum)} $satuanTampil',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: s.habis || s.menipis
