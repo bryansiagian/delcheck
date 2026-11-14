@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/api_client.dart';
+import '../core/format.dart';
 import '../models/pesanan.dart';
 import '../providers/auth_provider.dart';
 import '../services/admin_service.dart';
@@ -9,6 +10,7 @@ import '../services/produk_service.dart';
 import '../services/stok_service.dart';
 import 'admin_verifikasi_screen.dart';
 import 'buat_pesanan_screen.dart';
+import 'pesanan_detail_screen.dart';
 import 'pesanan_list_screen.dart';
 import 'produk_list_screen.dart';
 import 'stok_list_screen.dart';
@@ -24,9 +26,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // Palet Warna Sesuai Tailwind HTML
   static const Color _bgSurface = Color(0xFFF1F5F9);
   static const Color _primary = Color(0xFF2563EB);
-  static const Color _primaryDark = Color(0xFF004AC6);
-  static const Color _textDark = Color(0xFF0B1C30);
-  static const Color _textMuted = Color(0xFF434655);
+  static const Color _primaryDark = Color(0xFF1D4ED8);
+  static const Color _textDark = Color(0xFF0F172A);
+  static const Color _textMuted = Color(0xFF64748B);
 
   bool _memuat = true;
 
@@ -41,11 +43,17 @@ class _HomeScreenState extends State<HomeScreen> {
   int _tokoDisetujui = 0;
   int _tokoMenungguVerifikasi = 0;
 
-  // Metrik Warehouse (Produk & Stok)
+  // Metrik Warehouse (Produk & Stock)
   int _totalProdukWarehouse = 0;
   int _produkAktifWarehouse = 0;
   int _stokMenipisWarehouse = 0;
   int _stokHabisWarehouse = 0;
+
+  // Metrik Retail (Pesanan Toko)
+  int _retailMenunggu = 0;
+  int _retailDalamPerjalanan = 0;
+  int _retailDiterima = 0;
+  Pesanan? _retailPesananAktif;
 
   List<Pesanan> _pesananTerbaru = [];
 
@@ -66,10 +74,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final isAdmin = user?.punyaPeran('admin') ?? false;
     final isSales = user?.punyaPeran('sales') ?? false;
     final isWarehouse = user?.punyaPeran('warehouse') ?? false;
+    final isRetail = user?.punyaPeran('retail') ?? false;
 
     try {
-      // 1. Data untuk Admin & Sales (Pesanan)
-      if (isAdmin || isSales) {
+      // 1. Data Pesanan untuk Admin, Sales, dan Retail
+      if (isAdmin || isSales || isRetail) {
         final res = await api.get('/pesanan?per_page=30');
         final data = res['data'];
         final List rawItems = data is List
@@ -113,10 +122,37 @@ class _HomeScreenState extends State<HomeScreen> {
           } catch (_) {}
         }
 
+        if (isRetail) {
+          int menunggu = 0, jalan = 0, diterima = 0;
+          for (final p in listPesanan) {
+            final s = p.status.toLowerCase();
+            if (s.contains('menunggu')) {
+              menunggu++;
+            } else if (s == 'dikirim') {
+              jalan++;
+            } else if (s == 'diterima' || s == 'selesai') {
+              diterima++;
+            }
+          }
+          _retailMenunggu = menunggu;
+          _retailDalamPerjalanan = jalan;
+          _retailDiterima = diterima;
+
+          // Ambil pesanan berjalan (yang belum diterima / belum dibatalkan)
+          final berjalan = listPesanan.where((p) {
+            final s = p.status.toLowerCase();
+            return s != 'diterima' && s != 'selesai' && s != 'ditolak' && s != 'dibatalkan';
+          }).toList();
+
+          _retailPesananAktif = berjalan.isNotEmpty
+              ? berjalan.first
+              : (listPesanan.isNotEmpty ? listPesanan.first : null);
+        }
+
         _pesananTerbaru = listPesanan.take(3).toList();
       }
 
-      // 2. Data khusus Warehouse (Katalog Produk & Stok)
+      // 2. Data khusus Warehouse (Katalog Produk & Stock)
       if (isWarehouse) {
         try {
           final produkService = ProdukService(api);
@@ -130,8 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
         try {
           final stokService = StokService(api);
           final resStok = await stokService.daftar(halaman: 1);
-          int menipis = 0;
-          int habis = 0;
+          int menipis = 0, habis = 0;
           for (final s in resStok.items) {
             if (s.habis) {
               habis++;
@@ -185,6 +220,28 @@ class _HomeScreenState extends State<HomeScreen> {
     _muatDataDashboard();
   }
 
+  void _bukaPesananRetail(BuildContext context) {
+    _buka(
+      context,
+      const PesananListScreen(
+        judul: 'Pesanan Saya',
+        bisaBuat: true,
+        tampilanRetail: true,
+        filter: [
+          PesananFilter('Semua', null, icon: Icons.layers_rounded),
+          PesananFilter('Menunggu', 'menunggu_konfirmasi_sales',
+              icon: Icons.hourglass_top_rounded),
+          PesananFilter('Diproses', 'dikonfirmasi,diproses',
+              icon: Icons.inventory_2_rounded),
+          PesananFilter('Dalam perjalanan', 'dikirim',
+              icon: Icons.local_shipping_rounded),
+          PesananFilter('Diterima', 'diterima,selesai',
+              icon: Icons.check_circle_rounded),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().user;
@@ -213,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [_primaryDark, _primary],
+                    colors: [_primaryDark, Color(0xFF3B82F6)],
                   ),
                   borderRadius: BorderRadius.only(
                     bottomLeft: Radius.circular(36),
@@ -343,11 +400,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Icon(
-                                          warehouse
-                                              ? Icons.warehouse_rounded
-                                              : (sales
-                                                  ? Icons.work_outline_rounded
-                                                  : Icons.shield_outlined),
+                                          retail
+                                              ? Icons.storefront_outlined
+                                              : (warehouse
+                                                  ? Icons.warehouse_rounded
+                                                  : (sales
+                                                      ? Icons.work_outline_rounded
+                                                      : Icons.shield_outlined)),
                                           size: 12,
                                           color: Colors.white,
                                         ),
@@ -374,9 +433,358 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // ================= 2. DASHBOARD KHUSUS WAREHOUSE =================
-              if (warehouse) ...[
+              // ================= 2. DASHBOARD KHUSUS RETAIL =================
+              if (retail) ...[
                 // Overlapping Summary Card 3 Kolom
+                Transform.translate(
+                  offset: const Offset(0, -26),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF0F172A).withOpacity(0.08),
+                            blurRadius: 24,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          _buildMetricItem(
+                            icon: Icons.hourglass_top_rounded,
+                            iconColor: const Color(0xFFF97316),
+                            bgColor: const Color(0xFFFFEDD5),
+                            count: _memuat ? '...' : '$_retailMenunggu',
+                            label: 'Menunggu\nkonfirmasi',
+                          ),
+                          Container(
+                              width: 1, height: 36, color: const Color(0xFFE2E8F0)),
+                          _buildMetricItem(
+                            icon: Icons.local_shipping_rounded,
+                            iconColor: const Color(0xFF4F46E5),
+                            bgColor: const Color(0xFFE0E7FF),
+                            count: _memuat ? '...' : '$_retailDalamPerjalanan',
+                            label: 'Dalam\nperjalanan',
+                          ),
+                          Container(
+                              width: 1, height: 36, color: const Color(0xFFE2E8F0)),
+                          _buildMetricItem(
+                            icon: Icons.check_circle_rounded,
+                            iconColor: const Color(0xFF0D9488),
+                            bgColor: const Color(0xFFCCFBF1),
+                            count: _memuat ? '...' : '$_retailDiterima',
+                            label: 'Diterima',
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Section Layanan Retail
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Layanan',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: _textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Service 1: Pesan Produk (Gradient to Blue-50)
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: const Color(0xFFF1F5F9)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF0F172A).withOpacity(0.05),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                                    ),
+                                    borderRadius: BorderRadius.circular(18),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: _primary.withOpacity(0.25),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.add_shopping_cart_rounded,
+                                      color: Colors.white, size: 26),
+                                ),
+                                const SizedBox(width: 14),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Pesan Produk',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: _textDark,
+                                        ),
+                                      ),
+                                      SizedBox(height: 3),
+                                      Text(
+                                        'Pilih produk dan kirim pesanan',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: _textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: ElevatedButton(
+                                onPressed: () =>
+                                    _buka(context, const BuatPesananScreen()),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _primary,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: 2,
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Mulai memesan',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    SizedBox(width: 6),
+                                    Icon(Icons.arrow_forward_rounded, size: 18),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Service 2: Pesanan Saya (Gradient to Indigo-50)
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: const Color(0xFFF1F5F9)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF0F172A).withOpacity(0.05),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFF4F46E5), Color(0xFF4338CA)],
+                                    ),
+                                    borderRadius: BorderRadius.circular(18),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF4F46E5).withOpacity(0.25),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(Icons.receipt_long_rounded,
+                                      color: Colors.white, size: 26),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text(
+                                            'Pesanan Saya',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: _textDark,
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 10, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFE0E7FF),
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                            ),
+                                            child: Text(
+                                              '$_retailDalamPerjalanan sedang dikirim',
+                                              style: const TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFF4F46E5),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 3),
+                                      const Text(
+                                        'Pantau status barang diterima',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: _textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            SizedBox(
+                              width: double.infinity,
+                              height: 50,
+                              child: OutlinedButton(
+                                onPressed: () => _bukaPesananRetail(context),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: _primary,
+                                  side: const BorderSide(
+                                      color: _primary, width: 2),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Lihat pesanan',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    SizedBox(width: 6),
+                                    Icon(Icons.arrow_forward_rounded, size: 18),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Section Pesanan Berjalan (Live Order Tracker)
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Pesanan berjalan',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: _textDark,
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: () => _bukaPesananRetail(context),
+                            child: const Text('Lihat semua',
+                                style: TextStyle(
+                                    color: _primary,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      if (_retailPesananAktif != null)
+                        _buildLiveOrderCard(_retailPesananAktif!)
+                      else
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF0F172A).withOpacity(0.04),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: const Center(
+                            child: Column(
+                              children: [
+                                Icon(Icons.inbox_outlined,
+                                    size: 40, color: Color(0xFFCBD5E1)),
+                                SizedBox(height: 8),
+                                Text(
+                                  'Belum ada pesanan yang sedang berjalan.',
+                                  style: TextStyle(
+                                      color: _textMuted, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // ================= 3. DASHBOARD KHUSUS WAREHOUSE =================
+              if (warehouse) ...[
                 Transform.translate(
                   offset: const Offset(0, -26),
                   child: Padding(
@@ -410,7 +818,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             iconColor: const Color(0xFF9D4300),
                             bgColor: const Color(0xFFFFDBCA),
                             count: _memuat ? '...' : '$_stokMenipisWarehouse',
-                            label: 'Stok menipis',
+                            label: 'Stock menipis',
                           ),
                           Container(
                               width: 1, height: 36, color: const Color(0xFFE2E8F0)),
@@ -419,7 +827,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             iconColor: const Color(0xFFBA1A1A),
                             bgColor: const Color(0xFFFFDAD6),
                             count: _memuat ? '...' : '$_stokHabisWarehouse',
-                            label: 'Stok habis',
+                            label: 'Stock habis',
                           ),
                         ],
                       ),
@@ -427,7 +835,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                // Section Layanan Warehouse
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                   child: Column(
@@ -442,8 +849,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-
-                      // Service 1: Produk
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -460,7 +865,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           children: [
                             Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Container(
                                   width: 56,
@@ -470,13 +874,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                       colors: [Color(0xFF2563EB), Color(0xFF004AC6)],
                                     ),
                                     borderRadius: BorderRadius.circular(18),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: _primary.withOpacity(0.25),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
                                   ),
                                   child: const Icon(Icons.inventory_2_rounded,
                                       color: Colors.white, size: 28),
@@ -486,48 +883,31 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Text(
-                                        'Produk',
-                                        style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.bold,
-                                          color: _textDark,
-                                        ),
-                                      ),
+                                      const Text('Produk',
+                                          style: TextStyle(
+                                              fontSize: 17,
+                                              fontWeight: FontWeight.bold,
+                                              color: _textDark)),
                                       const SizedBox(height: 4),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 10, vertical: 3),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFDBE1FF),
-                                          borderRadius:
-                                              BorderRadius.circular(20),
+                                          borderRadius: BorderRadius.circular(20),
                                         ),
                                         child: Text(
                                           '$_produkAktifWarehouse produk aktif',
                                           style: const TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: _primary,
-                                          ),
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: _primary),
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: 12),
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Tambah, ubah, dan hapus produk katalog',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _textMuted,
-                                  height: 1.3,
-                                ),
-                              ),
                             ),
                             const SizedBox(height: 16),
                             SizedBox(
@@ -540,20 +920,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                   backgroundColor: _primary,
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  elevation: 2,
+                                      borderRadius: BorderRadius.circular(14)),
                                 ),
                                 child: const Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(
-                                      'Buka produk',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                    Text('Buka produk',
+                                        style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold)),
                                     SizedBox(width: 6),
                                     Icon(Icons.arrow_forward_rounded, size: 18),
                                   ],
@@ -564,8 +939,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-
-                      // Service 2: Stok
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -582,7 +955,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           children: [
                             Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Container(
                                   width: 56,
@@ -592,13 +964,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                       colors: [Color(0xFF656D84), Color(0xFF4D556B)],
                                     ),
                                     borderRadius: BorderRadius.circular(18),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.15),
-                                        blurRadius: 8,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
                                   ),
                                   child: const Icon(Icons.layers_rounded,
                                       color: Colors.white, size: 28),
@@ -608,48 +973,31 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Text(
-                                        'Stok',
-                                        style: TextStyle(
-                                          fontSize: 17,
-                                          fontWeight: FontWeight.bold,
-                                          color: _textDark,
-                                        ),
-                                      ),
+                                      const Text('Stock',
+                                          style: TextStyle(
+                                              fontSize: 17,
+                                              fontWeight: FontWeight.bold,
+                                              color: _textDark)),
                                       const SizedBox(height: 4),
                                       Container(
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 10, vertical: 3),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFFFDBCA),
-                                          borderRadius:
-                                              BorderRadius.circular(20),
+                                          borderRadius: BorderRadius.circular(20),
                                         ),
                                         child: Text(
                                           '${_stokMenipisWarehouse + _stokHabisWarehouse} perlu diperhatikan',
                                           style: const TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color(0xFF9D4300),
-                                          ),
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF9D4300)),
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: 12),
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Tambah atau kurangi stok dan lihat riwayat',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _textMuted,
-                                  height: 1.3,
-                                ),
-                              ),
                             ),
                             const SizedBox(height: 16),
                             SizedBox(
@@ -663,19 +1011,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                   side: const BorderSide(
                                       color: _primary, width: 2),
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
+                                      borderRadius: BorderRadius.circular(14)),
                                 ),
                                 child: const Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text(
-                                      'Buka stok',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
+                                    Text('Buka stock',
+                                        style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold)),
                                     SizedBox(width: 6),
                                     Icon(Icons.arrow_forward_rounded, size: 18),
                                   ],
@@ -685,86 +1029,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
-
-                      // Section Aktivitas Terbaru Warehouse
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Aktivitas terbaru',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                              color: _textDark,
-                            ),
-                          ),
-                          TextButton(
-                            onPressed: () =>
-                                _buka(context, const StokListScreen()),
-                            child: const Text('Lihat semua',
-                                style: TextStyle(
-                                    color: _primary,
-                                    fontWeight: FontWeight.w600)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF0F172A).withOpacity(0.05),
-                              blurRadius: 14,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            _buildActivityRow(
-                              icon: Icons.add_rounded,
-                              iconBg: const Color(0xFFDCE9FF),
-                              iconColor: _primary,
-                              title: 'Penyesuaian stok opname tercatat',
-                              time: 'Riwayat mutasi gudang',
-                            ),
-                            const Divider(
-                                height: 1,
-                                color: Color(0xFFF1F5F9),
-                                indent: 16,
-                                endIndent: 16),
-                            _buildActivityRow(
-                              icon: Icons.warning_amber_rounded,
-                              iconBg: const Color(0xFFFFDBCA),
-                              iconColor: const Color(0xFF9D4300),
-                              title: '$_stokMenipisWarehouse barang berada di bawah stok aman',
-                              time: 'Perlu restok gudang',
-                            ),
-                            const Divider(
-                                height: 1,
-                                color: Color(0xFFF1F5F9),
-                                indent: 16,
-                                endIndent: 16),
-                            _buildActivityRow(
-                              icon: Icons.inventory_2_rounded,
-                              iconBg: const Color(0xFFDBE1FF),
-                              iconColor: _primary,
-                              title: '$_totalProdukWarehouse katalog produk terdaftar',
-                              time: 'Inventaris pusat',
-                            ),
-                          ],
-                        ),
-                      ),
                     ],
                   ),
                 ),
               ],
 
-              // ================= 3. DASHBOARD KHUSUS SALES =================
+              // ================= 4. DASHBOARD KHUSUS SALES =================
               if (sales) ...[
                 Transform.translate(
                   offset: const Offset(0, -26),
@@ -817,23 +1087,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
 
-                // Layanan Sales
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Layanan',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                          color: _textDark,
-                        ),
-                      ),
+                      const Text('Layanan',
+                          style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: _textDark)),
                       const SizedBox(height: 12),
-
-                      // Pesanan
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -916,6 +1180,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     const PesananListScreen(
                                       judul: 'Konfirmasi Pesanan',
                                       tampilkanToko: true,
+                                      tampilanSales: true,
                                       filter: [
                                         PesananFilter('Menunggu',
                                             'menunggu_konfirmasi_sales',
@@ -954,8 +1219,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-
-                      // Kelola Akun
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -1062,7 +1325,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
-              // ================= 4. DASHBOARD KHUSUS ADMIN (PENGIRIMAN) =================
+              // ================= 5. DASHBOARD KHUSUS ADMIN (PENGIRIMAN) =================
               if (admin) ...[
                 Transform.translate(
                   offset: const Offset(0, -26),
@@ -1261,48 +1524,202 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
 
-              // ================= 5. ROLE RETAIL =================
-              if (retail) ...[
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      _MenuTile(
-                        ikon: Icons.add_shopping_cart,
-                        judul: 'Pesan Produk',
-                        subjudul: 'Pilih produk dan kirim pesanan',
-                        onTap: () => _buka(context, const BuatPesananScreen()),
-                      ),
-                      _MenuTile(
-                        ikon: Icons.receipt_long_outlined,
-                        judul: 'Pesanan Saya',
-                        subjudul: 'Pantau status barang diterima',
-                        onTap: () => _buka(
-                          context,
-                          const PesananListScreen(
-                            judul: 'Pesanan Saya',
-                            bisaBuat: true,
-                            filter: [
-                              PesananFilter('Semua', null),
-                              PesananFilter('Menunggu',
-                                  'menunggu_konfirmasi_sales'),
-                              PesananFilter('Diproses',
-                                  'dikonfirmasi,diproses'),
-                              PesananFilter('Dalam perjalanan', 'dikirim'),
-                              PesananFilter('Diterima', 'diterima,selesai'),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
               const SizedBox(height: 24),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // --- WIDGET HELPER: Live Order Tracker Card (Retail) ---
+  Widget _buildLiveOrderCard(Pesanan p) {
+    final statusNorm = p.status.toLowerCase();
+    String badgeText = 'Dalam perjalanan';
+    Color badgeBg = const Color(0xFFE0E7FF);
+    Color badgeColor = const Color(0xFF4F46E5);
+    int activeStep = 1;
+
+    if (statusNorm.contains('menunggu')) {
+      badgeText = 'Menunggu';
+      badgeBg = const Color(0xFFFFEDD5);
+      badgeColor = const Color(0xFFF97316);
+      activeStep = 1;
+    } else if (statusNorm == 'dikonfirmasi' || statusNorm == 'diproses') {
+      badgeText = 'Dikonfirmasi';
+      badgeBg = const Color(0xFFE0E7FF);
+      badgeColor = const Color(0xFF4F46E5);
+      activeStep = 2;
+    } else if (statusNorm == 'dikirim') {
+      badgeText = 'Dalam perjalanan';
+      badgeBg = const Color(0xFFDBEAFE);
+      badgeColor = _primary;
+      activeStep = 3;
+    } else if (statusNorm == 'diterima' || statusNorm == 'selesai') {
+      badgeText = 'Diterima';
+      badgeBg = const Color(0xFFCCFBF1);
+      badgeColor = const Color(0xFF0D9488);
+      activeStep = 4;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF0F172A).withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    '#${p.nomor}',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: _textDark,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    p.dibuat != null ? formatTanggalJam(p.dibuat!) : '',
+                    style: const TextStyle(fontSize: 11, color: _textMuted),
+                  ),
+                ],
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  badgeText,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // 4-Step Tracker Retail (Menunggu -> Konfirmasi -> Jalan -> Diterima)
+          _buildRetailProgressTracker(activeStep),
+          const SizedBox(height: 14),
+
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+          const SizedBox(height: 12),
+
+          Row(
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.inventory_2_outlined,
+                      size: 15, color: _textMuted),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${p.jumlahItem} item',
+                    style: const TextStyle(fontSize: 12, color: _textMuted),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 16),
+              Row(
+                children: [
+                  const Icon(Icons.account_balance_wallet_outlined,
+                      size: 15, color: _textMuted),
+                  const SizedBox(width: 4),
+                  Text(
+                    formatRupiah(p.total),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: _textDark,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              InkWell(
+                onTap: () => _buka(context, PesananDetailScreen(id: p.id)),
+                child: const Text(
+                  'Lihat detail ›',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: _primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRetailProgressTracker(int activeStep) {
+    const steps = ['Menunggu', 'Konfirmasi', 'Jalan', 'Diterima'];
+    const activeColor = Color(0xFF4F46E5);
+
+    return Row(
+      children: List.generate(steps.length * 2 - 1, (index) {
+        if (index.isOdd) {
+          final stepIndex = (index ~/ 2) + 1;
+          final isLineActive = stepIndex < activeStep;
+          return Expanded(
+            child: Container(
+              height: 2,
+              color: isLineActive ? activeColor : const Color(0xFFE2E8F0),
+            ),
+          );
+        } else {
+          final stepIndex = (index ~/ 2) + 1;
+          final isPassed = stepIndex <= activeStep;
+          final isCurrent = stepIndex == activeStep;
+
+          return Column(
+            children: [
+              Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: isPassed ? activeColor : const Color(0xFFCBD5E1),
+                  shape: BoxShape.circle,
+                  border: isCurrent
+                      ? Border.all(color: const Color(0xFFC7D2FE), width: 3)
+                      : Border.all(color: Colors.white, width: 2),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                steps[index ~/ 2],
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: isPassed ? FontWeight.bold : FontWeight.w500,
+                  color: isPassed ? activeColor : const Color(0xFF94A3B8),
+                ),
+              ),
+            ],
+          );
+        }
+      }),
     );
   }
 
@@ -1342,78 +1759,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  // --- WIDGET HELPER: Baris Aktivitas ---
-  static Widget _buildActivityRow({
-    required IconData icon,
-    required Color iconBg,
-    required Color iconColor,
-    required String title,
-    required String time,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(color: iconBg, shape: BoxShape.circle),
-            child: Icon(icon, color: iconColor, size: 18),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: _textDark,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  time,
-                  style: const TextStyle(fontSize: 11, color: _textMuted),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MenuTile extends StatelessWidget {
-  const _MenuTile({
-    required this.ikon,
-    required this.judul,
-    required this.subjudul,
-    required this.onTap,
-  });
-
-  final IconData ikon;
-  final String judul;
-  final String subjudul;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ListTile(
-        leading: Icon(ikon, color: const Color(0xFF2563EB)),
-        title: Text(judul, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(subjudul),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: onTap,
       ),
     );
   }
